@@ -27,7 +27,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 NOTEBOOKS = ROOT / "notebooks"
 COURSE = "Urban heat, ward by ward"
-TAGLINE = "Bengaluru · a one-day workshop"
+TAGLINE = "A workshop at BNMIT, Bengaluru · 14 October 2026"
 
 PAGES = [  # notebook, page file, short title, time
     ("00_start_here.py", "index.html", "Welcome", "09:00"),
