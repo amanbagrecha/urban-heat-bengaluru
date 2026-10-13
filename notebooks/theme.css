@@ -1,0 +1,173 @@
+/* Workshop theme: warm paper, ink, one heat accent.
+   Every colour and font lives in the tokens below — change them to match your website. */
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap");
+:root {
+  --paper: #faf8f3;
+  --ink: #1d1b16;
+  --muted: #6b665c;
+  --rule: #e3ded2;
+  --accent: #b23a2e;
+  --code-bg: #f3f0e8;
+  --serif: "Fraunces", Georgia, serif;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --marimo-heading-font: var(--serif);
+  --marimo-text-font: var(--sans);
+  --marimo-monospace-font: var(--mono);
+}
+
+body,
+#root,
+#App {
+  background: var(--paper) !important;
+  color: var(--ink);
+}
+
+/* ---- prose ---------------------------------------------------------- */
+.markdown {
+  font-family: var(--sans);
+  color: var(--ink);
+}
+.markdown p,
+.markdown li {
+  font-size: 1.02rem;
+  line-height: 1.68;
+}
+.markdown h1 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 2.7rem;
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+  margin: 0.2rem 0 0.9rem;
+  font-variation-settings: "opsz" 144;
+}
+.markdown h2 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 1.55rem;
+  line-height: 1.2;
+  margin-top: 1.4rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--rule);
+  font-variation-settings: "opsz" 72;
+}
+.markdown h3 {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+.markdown a {
+  color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.markdown code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: var(--code-bg);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+.markdown code::before,
+.markdown code::after {
+  content: none;
+}
+.markdown table {
+  font-size: 0.93rem;
+  border-collapse: collapse;
+}
+.markdown th {
+  font-weight: 600;
+  text-align: left;
+  border-bottom: 1.5px solid var(--ink);
+}
+.markdown td {
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+.markdown blockquote {
+  border-left: 3px solid var(--accent);
+  color: var(--ink);
+  font-style: normal;
+}
+
+/* lesson header */
+.kicker {
+  font-family: var(--sans);
+  font-size: 0.78rem !important;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.2rem !important;
+}
+.lead {
+  font-size: 1.22rem;
+  line-height: 1.55;
+  color: #3a362e;
+  margin: 0 0 1em;
+}
+.next {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+}
+
+/* ---- charts: controls above the chart, quiet styling ------------------ */
+.vega-embed {
+  display: inline-flex !important;
+  flex-direction: column;
+}
+.vega-bindings {
+  order: -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 22px;
+  margin: 0 0 10px;
+  font-family: var(--sans);
+  font-size: 0.86rem;
+  color: var(--ink);
+}
+.vega-bind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.vega-bind-name {
+  font-weight: 600;
+}
+.vega-bind label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 10px;
+  cursor: pointer;
+}
+.vega-bind input[type="radio"],
+.vega-bind input[type="range"] {
+  accent-color: var(--accent);
+}
+.vega-bind input[type="range"] {
+  width: 120px;
+}
+.vega-embed .vega-actions,
+.vega-embed summary {
+  opacity: 0.35;
+}
+
+/* "How this file was made": folded under a chart */
+details.recipe { margin: 4px 0 26px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 8px 0; }
+details.recipe summary { cursor: pointer; font: 500 0.9rem var(--sans); color: var(--accent); }
+details.recipe summary span { color: var(--muted); font-weight: 400; }
+details.recipe p { font-size: 0.9rem; line-height: 1.6; margin: 10px 0; }
+details.recipe pre.code { max-height: 420px; overflow: auto; font-size: 12.5px; }
+details.recipe pre.code { background: var(--code-bg); padding: 12px 14px; font-family: var(--mono); line-height: 1.55; white-space: pre; }
+details.recipe code { font-family: var(--mono); font-size: 0.86em; background: var(--code-bg); padding: 0.1em 0.3em; border-radius: 3px; }
+details.recipe pre.code .k, details.recipe pre.code .kn, details.recipe pre.code .kc, details.recipe pre.code .ow { color: var(--accent); font-weight: 500; }
+details.recipe pre.code .s, details.recipe pre.code .s1, details.recipe pre.code .s2, details.recipe pre.code .sd, details.recipe pre.code .sa { color: #4f6f2f; }
+details.recipe pre.code .c, details.recipe pre.code .c1 { color: #8a8478; font-style: italic; }
+details.recipe pre.code .mi, details.recipe pre.code .mf { color: #6b3f8a; }
+details.recipe pre.code .nf { color: #2e5f7a; }

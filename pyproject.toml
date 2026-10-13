@@ -1,0 +1,38 @@
+[project]
+name = "wardheat"
+version = "0.1.0"
+description = "Ward-level urban heat risk mapping and early response for Bengaluru — an open-source workshop package"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "marimo>=0.16",
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "pyarrow>=17",
+    "geopandas>=1.0",
+    "shapely>=2.0",
+    "pyproj>=3.6",
+    "pyogrio>=0.10",
+    "rasterio>=1.4",
+    "rioxarray>=0.17",
+    "xarray>=2024.10",
+    "odc-stac>=0.3.10",
+    "pystac-client>=0.8",
+    "planetary-computer>=1.0",
+    "matplotlib>=3.9",
+    "altair>=5.5",
+    "requests>=2.32",
+    "pooch>=1.8",
+    "tqdm>=4.66",
+]
+
+[project.scripts]
+wardheat = "wardheat.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wardheat"]

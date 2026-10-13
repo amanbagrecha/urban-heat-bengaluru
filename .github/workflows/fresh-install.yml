@@ -1,0 +1,99 @@
+name: Fresh install
+
+# A new laptop, step by step: install uv exactly as the Welcome page says, `uv sync`, check, then
+# run every notebook from top to bottom. Also weekly, because cloud sources move (catalogs change,
+# APIs change).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 1"   # Mondays, 03:00 UTC
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MPLBACKEND: Agg              # no screen on CI machines
+  PYTHONIOENCODING: utf-8      # CI output is a pipe, not a console
+  UV_PYTHON_PREFERENCE: only-managed   # ignore any Python already there, as on a new laptop
+
+jobs:
+  windows:
+    # Most participants: Windows PowerShell 5.1 (what every Windows 10/11 has), no git, no Python.
+    name: Windows, PowerShell, no git
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: 1. Install uv
+        run: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+      - name: Close PowerShell and open it again (uv on the PATH)
+        run: '"$env:USERPROFILE\.local\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append'
+      - name: 2. Download the workshop as a ZIP, in the home folder
+        run: |
+          cd $HOME
+          irm https://github.com/${{ github.repository }}/archive/${{ github.sha }}.zip -OutFile workshop.zip
+          Expand-Archive workshop.zip -DestinationPath .
+          Rename-Item "urban-heat-bengaluru-${{ github.sha }}" urban-heat-bengaluru-main
+      - name: uv sync
+        run: cd $HOME\urban-heat-bengaluru-main; uv sync --locked
+      - name: uv run wardheat check
+        run: cd $HOME\urban-heat-bengaluru-main; uv run wardheat check
+      - name: Run every notebook (the instructor's command)
+        run: cd $HOME\urban-heat-bengaluru-main; uv run python tests/run_notebook.py
+      - name: 3. uv run marimo edit notebooks (starts and answers)
+        run: |
+          cd $HOME\urban-heat-bengaluru-main
+          $marimo = Start-Process uv -ArgumentList "run", "marimo", "edit", "notebooks", "--headless", "--no-token", "--port", "2718" -PassThru -NoNewWindow
+          $up = $false
+          foreach ($i in 1..60) {
+            Start-Sleep -Seconds 2
+            try { if ((Invoke-WebRequest http://localhost:2718/health -UseBasicParsing).StatusCode -eq 200) { $up = $true; break } } catch {}
+          }
+          Stop-Process -Id $marimo.Id -Force
+          if (-not $up) { throw "marimo did not answer on port 2718" }
+          "marimo answered after about $(2 * $i) s"
+      - name: Build one website page (instructor)
+        run: cd $HOME\urban-heat-bengaluru-main; uv run wardheat site --only 01_where_is_it_hot.py --out site-test
+
+  linux:
+    name: Linux with nothing installed
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04    # no Python, no uv, no git
+    timeout-minutes: 45
+    steps:
+      - name: Get the two tools the setup needs (curl, git)
+        run: apt-get update && apt-get install -y --no-install-recommends curl ca-certificates git
+      - uses: actions/checkout@v4
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: uv sync
+        run: uv sync --locked
+      - name: uv run wardheat check
+        run: uv run wardheat check
+      - name: Run every notebook
+        run: uv run python tests/run_notebook.py notebooks/*.py
+
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: uv sync
+        run: uv sync --locked
+      - name: uv run wardheat check
+        run: uv run wardheat check
+      - name: Run every notebook
+        run: uv run python tests/run_notebook.py notebooks/*.py

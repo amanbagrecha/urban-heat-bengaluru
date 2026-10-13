@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+data/
+dist/
+logs/
+__marimo__/
+.marimo/
+.DS_Store
+site/
+.claude/
