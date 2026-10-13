@@ -25,8 +25,9 @@ PEOPLE = ["#f4f0e6", "#dccbe0", "#b08fbf", "#7c5795", "#4a2b63"]
 COVER = {"trees": "#4f7d4a", "water": "#3d7ea6", "mixed": "#b9b2a5", "built-up": "#8c5a4a", "farmland": "#d1a24f"}
 RISK = {"Low": "#ece4cf", "Medium": "#e9a35a", "High": "#b23a2e"}
 LEVELS = ["Green", "Yellow", "Orange", "Red", "Magenta"]
+HEAT_WORDS = ["Normal", "Warm for the season", "Hot", "Very hot", "Extreme"]  # the same levels, in words
 LEVEL_COLORS = ["#e2ddcf", "#f2cf5b", "#e8893a", "#c8442d", "#7d2a5c"]
-ALERTS = ["No alert", "Advisory", "Heat alert", "Heat emergency"]
+ALERTS = ["No alert", "Take care", "Heat alert", "Emergency"]
 ALERT_COLORS = ["#e2ddcf", "#f2cf5b", "#e8893a", "#b23a2e"]
 MATRIX = {"Low": [0, 0, 1, 2, 3], "Medium": [0, 1, 1, 2, 3], "High": [0, 1, 2, 3, 3]}  # = warning.ALERT_MATRIX
 
@@ -354,9 +355,9 @@ def heat_calendar(hr: pd.DataFrame, first_year: int = 2024):
 
 
 def alert_map(g: gpd.GeoDataFrame, level: int = 3):
-    """Ward alerts = city HeatRisk level × ward risk class. Move the slider to change the city level."""
+    """Ward alerts: pick how hot tomorrow is for the city; each ward's alert also depends on its risk."""
     lvl = alt.param(name="lvl", value=level,
-                    bind=alt.binding_radio(options=[0, 1, 2, 3, 4], labels=[f"{i} {n}" for i, n in enumerate(LEVELS)], name="City HeatRisk "))
+                    bind=alt.binding_radio(options=[0, 1, 2, 3, 4], labels=HEAT_WORDS, name="Tomorrow in Bengaluru: "))
     expr = " : ".join(f"datum.risk == '{c}' ? {row}[lvl]" for c, row in MATRIX.items()) + " : 0"
     names = json.dumps(ALERTS)
     alert_color = alt.Color("alert_name:N", scale=alt.Scale(domain=ALERTS, range=ALERT_COLORS), legend=alt.Legend(title=None))
@@ -366,7 +367,7 @@ def alert_map(g: gpd.GeoDataFrame, level: int = 3):
         .encode(color=alert_color, tooltip=[alt.Tooltip("label:N", title="ward"), alt.Tooltip("risk:N", title="ward risk"),
                                             alt.Tooltip("alert_name:N", title="alert")])
         .project("mercator")
-        .properties(width=390, height=410, title=alt.Title("Ward alerts", subtitle="Same weather, different alerts"))
+        .properties(width=390, height=410, title=alt.Title("Ward alerts", subtitle="Same weather, stronger alerts where risk is high"))
     )
     counts = (
         base.mark_bar(height=14)
@@ -375,15 +376,4 @@ def alert_map(g: gpd.GeoDataFrame, level: int = 3):
                 color=alert_color, tooltip=["alert_name:N", "count():Q"])
         .properties(width=170, height=110, title=alt.Title("How many wards", subtitle=" "))
     )
-    m = pd.DataFrame([{"risk": c, "level": i, "alert": a, "alert_name": ALERTS[a]} for c, row in MATRIX.items() for i, a in enumerate(row)])
-    grid = alt.Chart(m, title=alt.Title("The rule", subtitle="ward risk × city level → alert"))
-    cells = grid.mark_rect(stroke=PAPER, strokeWidth=2).encode(
-        x=alt.X("level:O", title="city HeatRisk level", axis=alt.Axis(labelAngle=0, domain=False, ticks=False)),
-        y=alt.Y("risk:N", sort=["High", "Medium", "Low"], title=None, axis=alt.Axis(domain=False, ticks=False)),
-        color=alert_color,
-        opacity=alt.when("datum.level == lvl").then(alt.value(1)).otherwise(alt.value(0.35)),
-        tooltip=["risk:N", "level:O", "alert_name:N"],
-    )
-    text = grid.mark_text(fontSize=10).encode(x="level:O", y=alt.Y("risk:N", sort=["High", "Medium", "Low"]), text="alert:Q")
-    matrix = (cells + text).properties(width=170, height=100)
-    return alt.hconcat(city, alt.vconcat(matrix, counts, spacing=30), spacing=20)
+    return alt.hconcat(city, counts, spacing=20)

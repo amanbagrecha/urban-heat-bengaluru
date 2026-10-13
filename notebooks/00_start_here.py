@@ -53,7 +53,8 @@ def _(mo):
     ## Where we are going
 
     By three o'clock you will have built this: a warning map that turns tomorrow's forecast into an
-    alert for each of the city's 369 wards. Try the levels above the map.
+    alert for each of the city's 369 wards. Pick how hot tomorrow will be. The same weather gets a
+    stronger alert in wards where more people live with less shade.
     """)
     return
 

@@ -72,13 +72,13 @@ def _(era5, mo):
     1991–2020 and find how hot the hottest 10 %, 5 %, 2 % and 0.5 % of days were. A day climbs one
     level for every one of those bars its maximum *or* its night minimum clears:
 
-    | Level | The day or night is hotter than… | Who is at risk |
-    |---|---|---|
-    | 0 Green | normal | almost nobody |
-    | 1 Yellow | 90 % of days for that date | the most heat-sensitive |
-    | 2 Orange | 95 % | sensitive groups, anyone outdoors for long |
-    | 3 Red | 98 % | anyone without cooling or water |
-    | 4 Magenta | 99.5 % | everyone, rare and long |
+    | Level | In words | The day or night is hotter than… | Who is at risk |
+    |---|---|---|---|
+    | 0 Green | normal | – | almost nobody |
+    | 1 Yellow | warm for the season | 90 % of days for that date | the most heat-sensitive |
+    | 2 Orange | hot | 95 % | sensitive groups, anyone outdoors for long |
+    | 3 Red | very hot | 98 % | anyone without cooling or water |
+    | 4 Magenta | extreme | 99.5 % | everyone, rare and long |
 
     Hot days *and* hot nights in a row raise the level by one: heat that doesn't let up is the
     dangerous kind.
@@ -128,8 +128,8 @@ def _(climate, normal, pd, warning):
     import requests
     from requests.adapters import HTTPAdapter, Retry
 
-    web = requests.Session()  # tries again, up to 4 times, if the connection drops
-    web.mount("https://", HTTPAdapter(max_retries=Retry(total=4, backoff_factor=2)))
+    web = requests.Session()  # tries again, up to 4 times, if the connection drops or the service is busy
+    web.mount("https://", HTTPAdapter(max_retries=Retry(total=4, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])))
     reply = web.get("https://api.open-meteo.com/v1/forecast", params={
         "latitude": 12.98, "longitude": 77.59, "timezone": "Asia/Kolkata",
         "daily": "temperature_2m_max,temperature_2m_min", "past_days": 5,
@@ -153,7 +153,15 @@ def _(mo):
 
     The forecast gives one level for the whole city. But the same weather is more dangerous in a
     crowded, treeless ward than in a leafy one. So each ward's alert combines the city level with
-    the ward's risk class from lesson 3. Pick a level and see who gets warned.
+    the ward's risk class from lesson 3:
+
+    | Tomorrow is… | normal | warm | hot | very hot | extreme |
+    |---|---|---|---|---|---|
+    | **High-risk ward** | no alert | take care | heat alert | emergency | emergency |
+    | **Medium-risk ward** | no alert | take care | take care | heat alert | emergency |
+    | **Low-risk ward** | no alert | no alert | take care | heat alert | emergency |
+
+    Pick a level and see who gets warned.
     """)
     return
 
@@ -169,8 +177,8 @@ def _(charts, datapack, indices, load_wards):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    At Orange, only the High-risk wards get a full heat alert. At Red, everyone is alerted and the
-    High-risk wards move to an emergency.
+    On a hot day, only the High-risk wards get a full heat alert. On a very hot day every ward gets
+    one, and the High-risk wards move to an emergency.
 
     ## Try it
 

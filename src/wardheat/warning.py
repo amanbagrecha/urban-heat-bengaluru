@@ -118,7 +118,7 @@ def imd_heatwave(fc: pd.DataFrame, clim: pd.DataFrame) -> pd.Series:
 # ---------------------------------------------------------------------------
 # Impact-based ward alerts
 # ---------------------------------------------------------------------------
-ALERTS = {0: "No alert", 1: "Advisory", 2: "Heat alert", 3: "Heat emergency"}
+ALERTS = {0: "No alert", 1: "Take care", 2: "Heat alert", 3: "Emergency"}
 
 # rows: city HeatRisk level 0..4, columns: ward risk class
 ALERT_MATRIX = pd.DataFrame(
