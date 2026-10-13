@@ -126,8 +126,11 @@ def _(levels, mo):
 @app.cell
 def _(climate, normal, pd, warning):
     import requests
+    from requests.adapters import HTTPAdapter, Retry
 
-    reply = requests.get("https://api.open-meteo.com/v1/forecast", params={
+    web = requests.Session()  # tries again, up to 4 times, if the connection drops
+    web.mount("https://", HTTPAdapter(max_retries=Retry(total=4, backoff_factor=2)))
+    reply = web.get("https://api.open-meteo.com/v1/forecast", params={
         "latitude": 12.98, "longitude": 77.59, "timezone": "Asia/Kolkata",
         "daily": "temperature_2m_max,temperature_2m_min", "past_days": 5,
     }, timeout=30).json()["daily"]
