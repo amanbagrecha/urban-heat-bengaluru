@@ -33,7 +33,7 @@ LEVELS = {
     4: ("Magenta", "Extreme: rare, long heat, impacts likely for everyone"),
 }
 
-WORDS = ["normal", "warm for the season", "hot", "very hot", "extreme"]  # the five levels, in plain words
+WORDS = ["below the alert line", "warm", "hot", "very hot", "extreme"]  # the five levels, in plain words
 
 # percentile cut points (of the local, day-of-year climatology) for levels 1..4
 DEFAULT_CUTS = {"tmax": (90, 95, 98, 99.5), "tmin": (90, 95, 98, 99.5)}
@@ -97,6 +97,7 @@ def heatrisk(fc: pd.DataFrame, clim: pd.DataFrame, cuts: dict = DEFAULT_CUTS, du
         out[f"{v}_level"] = [_level(x, t) for x, t in zip(out[v], thr)]
         out[f"{v}_normal"] = clim.loc[doy, f"{v}_mean"].to_numpy()
         out[f"{v}_p95"] = thr_for(v, 95)
+        out[f"{v}_alert"] = thr_for(v, cuts[v][0])
         out[f"{v}_anom"] = out[v] - out[f"{v}_normal"]
     out["level"] = out[["tmax_level", "tmin_level"]].max(axis=1)
     both_hot = (out["tmax"] >= out["tmax_p95"]) & (out["tmin"] >= out["tmin_p95"])

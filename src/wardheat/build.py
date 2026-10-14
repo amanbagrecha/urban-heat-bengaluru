@@ -202,7 +202,7 @@ def _recipes() -> dict:
         "lst": ("lst_day", [step_landsat, landsat.median_composite, step_modis], ["landsat", "modis", "features"],
                 "44 Landsat passes and 105 MODIS night composites from Planetary Computer, about 8 minutes"),
         "canopy": ("canopy_frac", [step_canopy, landcover.canopy_fraction], ["canopy", "features"],
-                   "Meta's 1.2 m tree-height map over the whole city, about 3 minutes"),
+                   "Meta and WRI's ~1 m tree-height map over the whole city, about 3 minutes"),
         "population": ("pop", [step_population, step_pop_anchor, population.census_anchored],
                        ["population", "pop_anchor", "features"],
                        "WorldPop's 2025 map of all of India (about 780 MB, once), then a few seconds"),

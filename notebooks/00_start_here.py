@@ -50,12 +50,13 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _(charts, climate, datapack, indices, load_wards, pd, warning):
-    # tomorrow's real forecast, and the hottest day in the record, through the system we build today
+    # tomorrow's real forecast, and this year's hottest day, through the system we build today
     _era5 = datapack.table("era5_daily")
     _normal = warning.climatology(_era5, base=(1991, 2020))
     tomorrow = warning.heatrisk(climate.forecast(days=3, past_days=2), _normal).loc[climate.today() + pd.Timedelta(days=1)]
     _levels = warning.heatrisk(_era5.loc["1991":], _normal)
-    hot_day = _levels[_levels.level >= 2].iloc[-1]  # the last hot day in the record
+    _this_year = _era5.loc[str(_era5.index[-1].year), "tmax"]
+    hot_day = _levels.loc[_this_year.idxmax()]  # this year's highest air temperature in the ERA5 record
     _wards = load_wards()
     _risk = indices.ward_risk(indices.ward_table(_wards))["risk"]  # as in lesson 3
     _f = _risk.to_frame().assign(tomorrow=warning.ward_alerts(int(tomorrow.level), _risk),
@@ -67,13 +68,18 @@ def _(charts, climate, datapack, indices, load_wards, pd, warning):
 @app.cell(hide_code=True)
 def _(alert_wards, hot_day, mo, tomorrow):
     _warned = int((alert_wards["tomorrow"] != "No alert").sum())
-    _alerts = alert_wards["hot_day"].value_counts()
+    _hot_alerts = int(alert_wards["hot_day"].isin(["Heat alert", "Emergency"]).sum())
+    if tomorrow.level == 0:
+        _tomorrow = (f"{tomorrow.tmax:.1f} °C, {tomorrow.tmax_anom:+.1f} °C from a usual {tomorrow.name:%d %B} but below "
+                     f"the {tomorrow.tmax_alert:.1f} °C alert line, so no ward is warned")
+    else:
+        _tomorrow = f"{tomorrow.tmax:.1f} °C (night {tomorrow.tmin:.1f} °C): {tomorrow['in words']}, so {_warned} wards are warned"
     mo.md(f"""
     ## Where we are going
 
-    By 3 pm you will turn the weather forecast into a heat alert for each of the 369 wards. Tomorrow
-    ({tomorrow.name:%d %b}, {tomorrow.tmax:.0f} °C) is **{tomorrow["in words"]}**, so {_warned or "no"} wards are warned;
-    on the last hot day, {hot_day.name:%d %b %Y}, {_alerts.get("Heat alert", 0) + _alerts.get("Emergency", 0)} crowded, shadeless wards got a heat alert.
+    By 3 pm you will turn the air temperature forecast into a heat alert for each of the 369 wards. Tomorrow's
+    forecast high is {_tomorrow}. On this year's hottest afternoon, {hot_day.name:%d %B %Y} ({hot_day.tmax:.1f} °C air
+    temperature, ERA5), the same rule would have given {_hot_alerts} wards a heat alert.
     """)
     return
 
@@ -81,8 +87,8 @@ def _(alert_wards, hot_day, mo, tomorrow):
 @app.cell(hide_code=True)
 def _(alert_wards, charts, hot_day, tomorrow):
     charts.alert_maps(alert_wards, [
-        ("tomorrow", f"Tomorrow, {tomorrow.name:%d %b}", f"forecast {tomorrow.tmax:.0f} °C: {tomorrow['in words']}"),
-        ("hot_day", f"{hot_day.name:%d %b %Y}", f"{hot_day.tmax:.1f} °C: {hot_day['in words']}"),
+        ("tomorrow", f"Tomorrow, {tomorrow.name:%d %b}", f"air temperature forecast: {tomorrow.tmax:.1f} °C · {tomorrow['in words']}"),
+        ("hot_day", f"{hot_day.name:%d %b %Y}, this year's hottest day", f"air temperature (ERA5): {hot_day.tmax:.1f} °C · {hot_day['in words']}"),
     ])
     return
 
@@ -95,12 +101,12 @@ def _(mo):
     | Time | | |
     |---|---|---|
     | 09:00 | **Welcome** | get set up |
-    | 09:30 | **1 · Where is it hot?** | how satellites see heat, day and night |
+    | 09:30 | **1 · Where is it hot?** | surface temperature from satellites, day and night |
     | 10:30 | *break* | |
-    | 10:45 | **2 · Why are some places cooler?** | trees, lakes and concrete |
-    | 11:30 | **3 · Who is at risk?** | heat, people and shade on one map |
+    | 10:45 | **2 · Why are some places cooler?** | trees, lakes and concrete vs surface temperature |
+    | 11:30 | **3 · Who is at risk?** | surface temperature, people and shade per ward |
     | 12:30 | *lunch* | |
-    | 13:30 | **4 · When should we warn?** | tomorrow's alert for every ward |
+    | 13:30 | **4 · When should we warn?** | air temperature forecast → tomorrow's alert per ward |
     | 15:00 | close | |
 
     Change a number in a cell and everything that depends on it reruns; hover, click and drag the
@@ -108,15 +114,16 @@ def _(mo):
 
     ## The data
 
-    | What | Source | Squares |
-    |---|---|---|
-    | Wards | [GBA wards, Dec 2025](https://data.opencity.in) (OpenCity) | 369 wards |
-    | Heat by day | [Landsat 8 & 9](https://planetarycomputer.microsoft.com/dataset/landsat-c2-l2) | 30 m |
-    | Heat at night | [MODIS](https://planetarycomputer.microsoft.com/dataset/modis-11A2-061) | 1 km |
-    | Ground cover | [ESA WorldCover](https://esa-worldcover.org) | 10 m |
-    | Trees | [Meta / WRI canopy height](https://registry.opendata.aws/dataforgood-fb-forests/) | 1.2 m |
-    | People | Census 2011 + [WorldPop 2025](https://www.worldpop.org) | 100 m |
-    | Air temperature | [ERA5 and forecasts](https://open-meteo.com) (Open-Meteo) | ~25 km |
+    | What | How it is measured | When | Squares |
+    |---|---|---|---|
+    | Wards | [GBA ward boundaries](https://data.opencity.in) (OpenCity) | Dec 2025 | 369 wards |
+    | Surface temperature, day | [Landsat 8 & 9](https://planetarycomputer.microsoft.com/dataset/landsat-c2-l2): thermal camera, 705 km up | 10:40 am, Mar–May 2022–26 (44 pictures) | 30 m |
+    | Surface temperature, night | [MODIS](https://planetarycomputer.microsoft.com/dataset/modis-11A2-061) on Terra and Aqua: thermal camera, 8-day averages | ~10 pm and ~2:30 am, Mar–May 2022–26 | 1 km |
+    | Ground cover | [ESA WorldCover](https://esa-worldcover.org): Sentinel-1 radar and Sentinel-2 photos sorted into 11 classes | 2021 | 10 m |
+    | Trees | [Meta & WRI tree heights](https://registry.opendata.aws/dataforgood-fb-forests/): an AI model reading Maxar satellite photos | photos mostly 2018–2020 | ~1 m |
+    | People | Census 2011 ward counts, spread by [WorldPop](https://www.worldpop.org)'s 2025 model | 2011 count, 2025 map | 100 m |
+    | Air temperature, past | [ERA5](https://open-meteo.com/en/docs/historical-weather-api) (ECMWF): station, balloon and satellite readings fed into a weather model | hourly, 1991 to Sep 2026 | ~25 km |
+    | Air temperature, forecast | [Open-Meteo forecast](https://open-meteo.com/en/docs): global weather models | the next 7 days | model grid |
 
     ## Get set up
 

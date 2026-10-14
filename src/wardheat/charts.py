@@ -216,16 +216,35 @@ def ward_map(g: gpd.GeoDataFrame, show: dict[str, str], unit: str = "", palette=
 # ---------------------------------------------------------------------------
 # Lesson 2: why are some places cooler?
 # ---------------------------------------------------------------------------
+LANDMARKS = {"Cubbon Park": (77.5929, 12.9763), "Lalbagh": (77.5848, 12.9507)}  # lon, lat
+
+
+def _landmarks(factor: int = 8) -> pd.DataFrame:
+    """Column/row of each landmark in the 240 m cell grid, to label the city maps."""
+    from pyproj import Transformer
+
+    from . import datapack
+
+    g = datapack.grid30()
+    to_grid = Transformer.from_crs(4326, g.crs, always_xy=True)
+    rows = []
+    for name, (lon, lat) in LANDMARKS.items():
+        x, y = to_grid.transform(lon, lat)
+        rows.append({"name": name, "c": (x - g.transform.c) / g.transform.a / factor,
+                     "r": (y - g.transform.f) / g.transform.e / factor})
+    return pd.DataFrame(rows)
+
+
 def greens_explorer(px: pd.DataFrame):
     """Scatter of tree canopy vs daytime surface temperature, linked to the city map.
 
-    Drag a box on the scatter: the matching cells light up on the map.
+    Drag a box on the scatter: the matching cells light up on the map. Cubbon Park and Lalbagh are labelled.
     """
     brush = alt.selection_interval(name="brush", encodings=["x", "y"], value={"x": [0.35, 1.0], "y": [30, 46]})
     data, names = _cells(px, {"canopy": "canopy", "lst": "lst_day", "cover": "cover"})
     base = alt.Chart(data).transform_lookup(lookup="w", from_=names)
     tips = [alt.Tooltip("ward:N", title="ward"), alt.Tooltip("canopy:Q", format=".0%", title="tree canopy"),
-            alt.Tooltip("lst:Q", format=".1f", title="°C"), alt.Tooltip("cover:N", title="mostly")]
+            alt.Tooltip("lst:Q", format=".1f", title="surface °C"), alt.Tooltip("cover:N", title="mostly")]
     scatter = (
         base.mark_circle(size=7)
         .encode(
@@ -246,32 +265,37 @@ def greens_explorer(px: pd.DataFrame):
         .mark_rect()
         .encode(
             **xy["enc"],
-            color=alt.when(brush).then(alt.Color("lst:Q", scale=alt.Scale(range=HEAT, domain=[34, 44], clamp=True),
-                                                 legend=alt.Legend(title="°C", gradientLength=160, gradientThickness=8)))
-            .otherwise(alt.value("#ebe7dd")),
+            color=alt.when(brush).then(alt.Color("cover:N", scale=alt.Scale(domain=list(COVER), range=list(COVER.values())),
+                                                 legend=None))
+            .otherwise(alt.value("#efebe3")),
             tooltip=tips,
         )
-        .properties(**xy["size"], title=alt.Title("…and here they are", subtitle="Unselected patches fade to grey"))
+        .properties(**xy["size"], title=alt.Title("…and here they are", subtitle="Selected patches in the dots' colours"))
     )
-    return alt.hconcat(scatter + trend, city, spacing=24).resolve_scale(color="independent")
+    marks = alt.Chart(_landmarks())
+    ring = marks.mark_point(shape="circle", filled=False, size=90, color=INK, strokeWidth=1.5).encode(
+        x=alt.X("c:Q"), y=alt.Y("r:Q"), tooltip=alt.Tooltip("name:N", title="park"))
+    name = marks.mark_text(align="left", dx=8, fontSize=11, fontWeight=600, color=INK).encode(
+        x=alt.X("c:Q"), y=alt.Y("r:Q"), text="name:N")
+    return alt.hconcat(scatter + trend, city + ring + name, spacing=24).resolve_scale(color="independent")
 
 
 def day_night_by_cover(px: pd.DataFrame):
     """How much hotter or cooler than the city average each kind of place is, by day and by night."""
     rows = []
-    for when, col in (("day (10:40 am)", "lst_day"), ("night (10:30 pm)", "lst_night")):
+    for when, col in (("day, 10:40 am (Landsat)", "lst_day"), ("night, ~10 pm and ~2:30 am (MODIS)", "lst_night")):
         mean = px[col].mean()
         d = px.groupby("cover")[col].mean().sub(mean).rename("diff").reset_index()
         d["when"] = when
         rows.append(d)
     df = pd.concat(rows)
     order = ["farmland", "built-up", "mixed", "trees", "water"]
-    base = alt.Chart(df, title=alt.Title("Compared with the city average", subtitle="Farmland flips from hottest by day to cool at night; built-up stays warm"))
+    base = alt.Chart(df, title=alt.Title("Surface temperature compared with the city average", subtitle="Farmland flips from hottest by day to cool at night; built-up stays warm"))
     rule = base.mark_rule(color=RULE).encode(y=alt.Y("cover:N", sort=order, title=None), x="min(diff):Q", x2="max(diff):Q")
     pts = base.mark_circle(size=110, opacity=1).encode(
         y=alt.Y("cover:N", sort=order, title=None),
         x=alt.X("diff:Q", title="°C warmer (+) or cooler (−) than the city average"),
-        color=alt.Color("when:N", scale=alt.Scale(range=["#d9693b", "#3b4a7a"]), legend=alt.Legend(title=None)),
+        color=alt.Color("when:N", scale=alt.Scale(range=["#d9693b", "#3b4a7a"]), legend=alt.Legend(title=None, labelLimit=320)),
         tooltip=["cover:N", "when:N", alt.Tooltip("diff:Q", format="+.1f", title="°C vs city")],
     )
     zero = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(color=MUTED, strokeDash=[2, 2]).encode(x="x:Q")
@@ -282,18 +306,18 @@ def day_night_by_cover(px: pd.DataFrame):
 # Lesson 3: who is at risk?
 # ---------------------------------------------------------------------------
 def ingredient_maps(g: gpd.GeoDataFrame, width: int = 215, height: int = 240):
-    """Heat, crowding and lack of shade as three small ward maps; each is a rank among wards (0-1).
+    """Surface temperature, crowding and lack of shade as three small ward maps; each is a rank among wards (0-1).
 
-    ``g`` needs ``label``, ``H``, ``E``, ``V`` and the real values ``lst_built``, ``lst_night``,
-    ``people_per_ha``, ``canopy_frac`` for the tooltips.
+    ``g`` needs ``label``, ``H``, ``E``, ``V`` and the real values ``day_surface_temp``, ``night_surface_temp``,
+    ``people_per_ha``, ``trees`` for the tooltips.
     """
     color = alt.Color("rank:Q", scale=alt.Scale(range=HEAT, domain=[0, 1]),
                       legend=alt.Legend(title="share of wards it beats", format=".0%", orient="bottom",
                                         gradientLength=300, gradientThickness=8))
     maps = []
     for col, title, beats, real in [
-        ("H", "Heat", "hotter than", [alt.Tooltip("day_heat:Q", format=".1f", title="day °C"),
-                                      alt.Tooltip("night_heat:Q", format=".1f", title="night °C")]),
+        ("H", "Surface temperature", "hotter than", [alt.Tooltip("day_surface_temp:Q", format=".1f", title="surface °C, day"),
+                                                     alt.Tooltip("night_surface_temp:Q", format=".1f", title="surface °C, night")]),
         ("E", "Crowding", "more crowded than", [alt.Tooltip("people_per_ha:Q", format=",.0f", title="people / hectare")]),
         ("V", "Lack of shade", "less shaded than", [alt.Tooltip("trees:Q", format=".0%", title="tree cover")]),
     ]:
@@ -314,7 +338,7 @@ def risk_explorer(g: gpd.GeoDataFrame):
 
     ``g`` needs columns ``label``, ``H``, ``E``, ``V`` (0-1) and any tooltip columns.
     """
-    wH = alt.param(name="wH", value=1, bind=alt.binding_range(min=0, max=3, step=0.5, name="Heat "))
+    wH = alt.param(name="wH", value=1, bind=alt.binding_range(min=0, max=3, step=0.5, name="Surface temperature "))
     wE = alt.param(name="wE", value=1, bind=alt.binding_range(min=0, max=3, step=0.5, name="People "))
     wV = alt.param(name="wV", value=1, bind=alt.binding_range(min=0, max=3, step=0.5, name="Lack of shade "))
     hl = alt.selection_point(name="hl", fields=["label"], on="pointerover", clear="pointerout", empty=False)
@@ -327,7 +351,7 @@ def risk_explorer(g: gpd.GeoDataFrame):
         .transform_calculate(risk="datum.rank >= 0.7 ? 'High' : datum.rank >= 0.4 ? 'Medium' : 'Low'")
     )
     risk_color = alt.Color("risk:N", scale=alt.Scale(domain=list(RISK), range=list(RISK.values())), legend=alt.Legend(title=None))
-    extra = {"day_heat": (".1f", "day °C"), "night_heat": (".1f", "night °C"),
+    extra = {"day_surface_temp": (".1f", "surface °C, day"), "night_surface_temp": (".1f", "surface °C, night"),
              "people_per_ha": (",.0f", "people / hectare"), "trees": (".0%", "tree cover")}
     tips = [alt.Tooltip("label:N", title="ward"), alt.Tooltip("risk:N")]
     tips += [alt.Tooltip(f"{c}:Q", format=f, title=t) for c, (f, t) in extra.items() if c in g.columns]
@@ -381,7 +405,7 @@ def heat_calendar(hr: pd.DataFrame, first_year: int = 2024):
             color=level_color,
             opacity=alt.when(year).then(alt.value(1)).otherwise(alt.value(0.55)),
             tooltip=[alt.Tooltip("date_s:N", title="date"), alt.Tooltip("name:N", title="HeatRisk"),
-                     alt.Tooltip("tmax:Q", title="max °C"), alt.Tooltip("tmin:Q", title="min °C")],
+                     alt.Tooltip("tmax:Q", title="highest air °C"), alt.Tooltip("tmin:Q", title="lowest air °C")],
         )
         .add_params(year)
         .properties(width=560, height=330)
@@ -389,7 +413,7 @@ def heat_calendar(hr: pd.DataFrame, first_year: int = 2024):
     sel = alt.Chart(d).transform_filter(year)
     x = alt.X("day:Q", title=None, scale=alt.Scale(domain=[0, 91], nice=False),
               axis=alt.Axis(values=[0, 31, 61], labelExpr=ticks, grid=False))
-    y = alt.Y("tmax:Q", title="°C", scale=alt.Scale(domain=[15, 40]))
+    y = alt.Y("tmax:Q", title="air temperature (ERA5), °C", scale=alt.Scale(domain=[15, 40]))
     tmax = sel.mark_line(color="#b03a2e", strokeWidth=1.8).encode(x=x, y=y)
     tmin = sel.mark_line(color="#3b4a7a", strokeWidth=1.8).encode(x=x, y="tmin:Q")
     p95x = sel.mark_line(color="#b03a2e", strokeDash=[3, 3], strokeWidth=1).encode(x=x, y="tmax_p95:Q")
@@ -402,7 +426,7 @@ def heat_calendar(hr: pd.DataFrame, first_year: int = 2024):
         x=alt.value(0), y=alt.value(0), text="year:O")
     detail = (tmax + tmin + p95x + p95n + strip + label).properties(
         width=560, height=340,
-        title=alt.Title("Daily max (red) and night min (blue)", subtitle="Dashed: the local 95th percentile for that date. Strip: the HeatRisk level"),
+        title=alt.Title("Daily highest (red) and lowest (blue) air temperature, ERA5", subtitle="Dashed: hotter than 95 of 100 days around that date. Strip: the level"),
     )
     return alt.vconcat(cal, detail, spacing=28)
 
@@ -431,12 +455,12 @@ WORLDCOVER = {10: ("trees", "#3f7d3a"), 20: ("shrubs", "#8fa957"), 30: ("grass",
               90: ("wetland", "#6aa3a0")}
 
 SATELLITE_SEES_HEAT = """
-<svg viewBox="0 0 660 230" width="100%" style="max-width:660px; font: 12px var(--sans, sans-serif)" role="img"
+<svg viewBox="0 0 660 250" width="100%" style="max-width:660px; font: 12px var(--sans, sans-serif)" role="img"
      aria-label="Warm surfaces give off thermal infrared light; the satellite measures it">
   <rect x="270" y="8" width="120" height="30" rx="4" fill="#1d1b16"/><rect x="236" y="17" width="34" height="12" fill="#6b665c"/>
   <rect x="390" y="17" width="34" height="12" fill="#6b665c"/>
   <text x="330" y="28" fill="#faf8f3" text-anchor="middle">Landsat</text>
-  <text x="440" y="27" fill="#6b665c">700 km up: a camera for heat glow</text>
+  <text x="440" y="27" fill="#6b665c">705 km up: a camera for heat glow</text>
   <circle cx="40" cy="40" r="18" fill="#f2cf5b"/><text x="40" y="74" fill="#6b665c" text-anchor="middle">sun</text>
   <path d="M60 52 L120 150" stroke="#f2cf5b" stroke-width="2" stroke-dasharray="4 4"/>
   <g fill="none" stroke-linecap="round">
@@ -444,13 +468,14 @@ SATELLITE_SEES_HEAT = """
     <path d="M330 150 q-6 -12 0 -24 q6 -12 0 -24 q-6 -12 0 -24 q6 -12 0 -24" stroke="#e8893a" stroke-width="3"/>
     <path d="M550 150 q-6 -12 0 -24 q6 -12 0 -24 q-6 -12 0 -24" stroke="#f2cf5b" stroke-width="1.5"/>
   </g>
-  <rect x="40" y="155" width="140" height="22" fill="#3a3632"/><text x="110" y="198" text-anchor="middle" fill="#1d1b16">tar road</text>
-  <text x="110" y="214" text-anchor="middle" fill="#b23a2e" font-weight="600">≈ 50 °C, glows most</text>
+  <rect x="40" y="155" width="140" height="22" fill="#3a3632"/><text x="110" y="198" text-anchor="middle" fill="#1d1b16">roofs and roads</text>
+  <text x="110" y="214" text-anchor="middle" fill="#b23a2e" font-weight="600">≈ 40 °C, glows most</text>
   <circle cx="300" cy="145" r="16" fill="#3f7d3a"/><circle cx="330" cy="140" r="20" fill="#3f7d3a"/><circle cx="360" cy="146" r="15" fill="#3f7d3a"/>
   <rect x="270" y="160" width="120" height="17" fill="#5f8a4f"/><text x="330" y="198" text-anchor="middle" fill="#1d1b16">trees</text>
-  <text x="330" y="214" text-anchor="middle" fill="#e8893a" font-weight="600">≈ 35 °C</text>
+  <text x="330" y="214" text-anchor="middle" fill="#e8893a" font-weight="600">≈ 37 °C</text>
   <rect x="480" y="158" width="140" height="19" rx="9" fill="#4a7fb0"/><text x="550" y="198" text-anchor="middle" fill="#1d1b16">lake</text>
-  <text x="550" y="214" text-anchor="middle" fill="#b0902a" font-weight="600">≈ 28 °C, glows least</text>
+  <text x="550" y="214" text-anchor="middle" fill="#b0902a" font-weight="600">≈ 32 °C, glows least</text>
+  <text x="330" y="242" text-anchor="middle" fill="#6b665c">Bengaluru's surface temperature (Landsat), 10:40 am, middle value of March–May 2022–26</text>
 </svg>
 """
 
@@ -501,7 +526,7 @@ def levels_explainer(era5: pd.DataFrame, normal: pd.DataFrame, day: str = "2024-
         "share": ["90", "5", "3", "1.5", "0.5"],
         "ink": [INK, INK, INK, PAPER, PAPER],
     })
-    x = alt.X("from:Q", scale=alt.Scale(domain=[lo, hi], nice=False), title=f"daily high around {d:%d %B}, °C",
+    x = alt.X("from:Q", scale=alt.Scale(domain=[lo, hi], nice=False), title=f"daily highest air temperature (ERA5) around {d:%d %B}, °C",
               axis=alt.Axis(values=[round(c, 1) for c in cuts], format=".1f", grid=False))
     base = alt.Chart(zones)
     bar = base.mark_rect(stroke=PAPER, strokeWidth=2).encode(

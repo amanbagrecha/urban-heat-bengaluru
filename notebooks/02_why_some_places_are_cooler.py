@@ -25,9 +25,11 @@ def _(mo):
 
     # Why are some places cooler?
 
-    <div class="lead">What covers the ground decides how hot it gets.</div>
+    <div class="lead">What covers the ground decides its surface temperature.</div>
 
-    Each 240 m square also knows its share of trees (`canopy`), buildings (`built`) and water:
+    Tree cover (`canopy`) comes from Meta and WRI's tree-height map: an AI model measured the height of every ~1 m spot
+    from Maxar satellite photos taken mostly in 2018–2020, and we count the share of each square under trees taller than 3 m.
+    Buildings (`built`) and water come from WorldCover (lesson 1). Each 240 m square is the average of its 8 × 8 squares of 30 m:
     """)
     return
 
@@ -35,7 +37,7 @@ def _(mo):
 @app.cell
 def _(datapack):
     px = datapack.table("pixels")  # the city in 240 m squares
-    px[["ward", "lst_day", "canopy", "built", "water"]].head()
+    px[["ward", "lst_day", "canopy", "built", "water"]].head()  # lst_day = surface temperature at 10:40 am, °C
     return (px,)
 
 
@@ -44,7 +46,7 @@ def _(mo):
     mo.md(r"""
     ## More trees, cooler ground
 
-    Each dot is a square (across: tree cover, up: temperature). Drag a box to see where they are.
+    Each dot is a square (across: tree cover, up: surface temperature at 10:40 am). Drag a box to see where they are.
     """)
     return
 
@@ -64,7 +66,7 @@ def _(build):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Shade and evaporating water cool the ground; bare soil and dark roofs heat it.
+    Shade and evaporating water lower the surface temperature; bare soil and dark roofs raise it.
 
     ## How much cooler?
     """)
@@ -75,7 +77,7 @@ def _(mo):
 def _(np, px):
     built = px[px.built > 0.5]  # squares that are mostly buildings and roads
 
-    # fit a straight line: temperature = slope × canopy + intercept
+    # fit a straight line: surface temperature = slope × canopy + intercept
     slope, intercept = np.polyfit(built.canopy, built.lst_day, deg=1)
     return built, slope
 
@@ -83,7 +85,7 @@ def _(np, px):
 @app.cell(hide_code=True)
 def _(built, mo, slope):
     mo.md(f"""
-    Every extra 10 % of tree cover ≈ **{-slope * 0.1:.1f} °C cooler** ground ({len(built):,} built-up squares).
+    Every extra 10 % of tree cover ≈ **{-slope * 0.1:.1f} °C lower** surface temperature ({len(built):,} built-up squares).
 
     ## Day and night
     """)
@@ -99,7 +101,7 @@ def _(charts, px):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Farmland is hottest by day and cool by night; concrete keeps the heat after dark: the **urban heat island**.
+    Farmland has the highest surface temperature by day and is cool at night; concrete stays warm after dark: the **urban heat island**.
 
     ## Try it
 
@@ -112,7 +114,7 @@ def _(mo):
 def _(np, px):
     dense = px[px.built > 0.8]  # change the threshold here
     dense_slope, _ = np.polyfit(dense.canopy, dense.lst_day, deg=1)
-    f"{len(dense):,} dense squares: about {-dense_slope * 0.1:.1f} °C cooler per 10 % more canopy"
+    f"{len(dense):,} dense squares: about {-dense_slope * 0.1:.1f} °C lower surface temperature per 10 % more canopy"
     return
 
 

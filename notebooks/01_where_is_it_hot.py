@@ -29,7 +29,8 @@ def _(mo):
     # Where is it hot?
 
     <div class="lead">A satellite can't touch the ground with a thermometer. It measures the invisible
-    heat glow (thermal infrared) every surface gives off, and we turn that glow into temperature.</div>
+    heat glow (thermal infrared) every surface gives off, and that glow is turned into <b>surface temperature</b>:
+    how hot roofs, roads, trees and lakes are, not the air we breathe.</div>
     """)
     return
 
@@ -45,7 +46,9 @@ def _(mo):
     mo.md(r"""
     ## Finding the pictures
 
-    Landsat 8 and 9 pass every 8 days at 10:40 am; free online catalogues (STAC) list every picture:
+    Landsat 8 and 9 (NASA and USGS) each pass over Bengaluru every 16 days, together every 8, always at 10:40 am. Their
+    thermal camera sees 100 m squares, and USGS turns each picture into surface temperature on 30 m squares, correcting
+    for the air in between. Free online catalogues (STAC) list every picture:
     """)
     return
 
@@ -83,7 +86,7 @@ def _(mo):
     mo.md(r"""
     ## Reading one picture
 
-    We download only the pixels over Bengaluru and turn the stored numbers into °C:
+    We download only the pixels over Bengaluru and turn the stored numbers into surface temperature in °C:
     """)
     return
 
@@ -101,71 +104,85 @@ def _(datapack, items, np):
         window = from_bounds(*city, image.transform)
         dn = image.read(1, window=window)  # only the pixels over the city
 
-    # whole numbers -> °C (0 means no data)
+    # whole numbers -> surface temperature in °C (0 means no data)
     lst = np.where(dn > 0, dn * 0.00341802 + 149.0 - 273.15, np.nan)
     return lst, scene
 
 
 @app.cell(hide_code=True)
 def _(charts, lst):
-    charts.image(lst)
+    charts.image(lst, "surface temperature, °C")
     return
 
 
 @app.cell(hide_code=True)
 def _(mo, scene):
     mo.md(f"""
-    Bengaluru at 10:40 am on {scene.datetime:%d %B %Y}: pale is cool (lakes, parks), dark is hot (bare ground, roofs).
+    Surface temperature at 10:40 am on {scene.datetime:%d %B %Y} ({scene.properties["platform"].title()}, the clearest picture
+    of March–May 2024): pale is cooler (lakes, parks), dark is hotter (bare ground, roofs).
 
     ## At night: another satellite
 
-    Landsat only passes in the morning; **MODIS** (on NASA's Terra and Aqua) passes every night too, but in 1 km squares:
+    Landsat only passes in the morning. **MODIS**, a camera on NASA's Terra and Aqua satellites, also passes at night, in
+    1 km squares; each MODIS file is the average of the clear nights in 8 days. We load the Terra file for the same 8 days
+    as the Landsat picture:
     """)
     return
 
 
 @app.cell
-def _(catalog, np):
+def _(catalog, np, scene):
     import odc.stac
 
     nights = catalog.search(
-        collections=["modis-11A2-061"],  # MODIS surface temperature, 8 days per file
+        collections=["modis-11A2-061"],  # MODIS surface temperature, one file per 8 days
         bbox=[77.45, 12.82, 77.80, 13.155],
-        datetime="2024-04-01/2024-04-30",
+        datetime=f"{scene.datetime:%Y-%m-%d}",  # the 8-day files that include the Landsat picture's day
     ).item_collection()
-    terra = [i for i in nights if i.id.startswith("MOD")][0]  # MOD = Terra, about 10:30 pm
+    terra = [i for i in nights if i.id.startswith("MOD")][0]  # MOD = Terra, MYD = Aqua
 
     night = odc.stac.load(
-        [terra], bands=["LST_Night_1km"], bbox=[77.45, 12.82, 77.80, 13.155],
+        [terra], bands=["LST_Night_1km", "Night_view_time"], bbox=[77.45, 12.82, 77.80, 13.155],
         crs="EPSG:32643", resolution=1000,  # Landsat's map grid, in 1 km squares
     )
     dn_night = night["LST_Night_1km"].values[0].astype("float32")
-    lst_night = np.where(dn_night > 0, dn_night * 0.02 - 273.15, np.nan)  # -> °C
-    return (lst_night,)
+    lst_night = np.where(dn_night > 0, dn_night * 0.02 - 273.15, np.nan)  # -> surface temperature in °C
+
+    # the file also records when the satellite looked, in sun time; India's clock runs 20 minutes ahead of it here
+    seen = night["Night_view_time"].values[0]
+    seen_at = np.median(seen[seen < 255]) * 0.1 + 20 / 60  # hours after midnight, India time
+    return lst_night, seen_at, terra
 
 
 @app.cell(hide_code=True)
-def _(charts, lst, lst_night):
-    charts.images({"Landsat, 10:40 am, 30 m squares": lst, "MODIS, about 10:30 pm, 1 km squares": lst_night})
+def _(charts, lst, lst_night, pd, scene, seen_at, terra):
+    _start, _end = (pd.Timestamp(terra.properties[k]) for k in ("start_datetime", "end_datetime"))
+    _clock = pd.Timestamp(0) + pd.Timedelta(hours=seen_at)
+    charts.images({
+        f"Landsat · {scene.datetime:%d %b %Y}, 10:40 am · 30 m": lst,
+        f"MODIS Terra · nights of {_start:%d}–{_end:%d %b %Y}, ~{_clock:%I:%M %p} · 1 km": lst_night,
+    }, "surface temperature, °C")
     return
 
 
 @app.cell(hide_code=True)
 def _(lst, lst_night, mo, np):
     mo.md(f"""
-    Same city, two satellites: the night is {np.nanmean(lst) - np.nanmean(lst_night):.0f} °C cooler and blockier, and the centre stays warmest.
+    Same week, two satellites: the surface temperature is {np.nanmean(lst) - np.nanmean(lst_night):.0f} °C lower at night, and the centre stays warmest.
 
     ## Five summers in one map
 
-    We repeated this for 44 mornings and 105 nights (March–May 2022–26) and kept the middle value. Download the result:
+    We repeated this for 44 Landsat mornings and 105 MODIS 8-day files (Terra at about 10 pm, Aqua at about 2:30 am),
+    March–May 2022–26, and kept each square's middle value. So your browser can draw the whole city, the download
+    averages each 8 × 8 block of 30 m squares into one 240 m square:
     """)
     return
 
 
 @app.cell
 def _(datapack):
-    squares = datapack.table("pixels")  # 240 m squares, from the workshop GitHub page
-    squares[["ward", "lst_day", "lst_night"]].head()
+    squares = datapack.table("pixels")  # 12,449 squares of 240 m, from the workshop GitHub page
+    squares[["ward", "lst_day", "lst_night"]].head()  # surface temperature (°C) by day and at night
     return (squares,)
 
 
@@ -181,9 +198,9 @@ def _(mo):
 def _(charts, squares):
     charts.cell_map(
         squares,
-        {"Day, 10:40 am": "lst_day", "Night, 10:30 pm": "lst_night"},
-        "°C",
-        domains={"Day, 10:40 am": [34, 44], "Night, 10:30 pm": [22, 27]},
+        {"Day, 10:40 am (Landsat)": "lst_day", "Night, ~10 pm and ~2:30 am (MODIS)": "lst_night"},
+        "surface °C",
+        domains={"Day, 10:40 am (Landsat)": [34, 44], "Night, ~10 pm and ~2:30 am (MODIS)": [22, 27]},
     )
     return
 
@@ -197,11 +214,13 @@ def _(build):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    By day the hottest ground is farmland at the edges; at night it flips and the packed centre stays warm.
+    By day the highest surface temperature is on farmland at the edges; at night it flips and the packed centre stays warmest.
 
     ## From squares to wards
 
-    We average each ward's 30 m squares, but only those mostly covered by buildings, where people feel the heat:
+    We average the surface temperature of each ward's 30 m squares, but only squares mostly covered by buildings and roads,
+    where people live. ESA's WorldCover map says what covers each 10 m cell; it was made from 2021 Sentinel-1 radar and
+    Sentinel-2 photos:
     """)
     return
 
@@ -214,55 +233,31 @@ def _(charts, datapack):
 
 @app.cell
 def _(datapack, load_wards, np, ward_labels, zonal_stats):
-    wards = load_wards()  # the 369 wards' boundaries
-    lst_day = datapack.layer("lst_day")  # 5-summer middle value, 30 m squares, °C
+    wards = load_wards()  # the 369 GBA wards' boundaries (OpenCity)
+    lst_day = datapack.layer("lst_day")  # surface temperature at 10:40 am, 5-summer middle value, 30 m squares, °C
     built_frac = datapack.layer("built_frac")  # 0 = no buildings, 1 = all buildings and roads
     built_up = built_frac >= 0.5  # mostly buildings and roads
 
     labels = ward_labels(wards, datapack.grid30())  # each square -> the number of its ward
     hot_ground = np.where(built_up, lst_day, np.nan)  # leave out squares that aren't built up
-    ward_heat = zonal_stats({"lst": hot_ground}, labels)  # average per ward
-    ward_heat.head()
-    return built_frac, labels, lst_day, ward_heat, wards
+    ward_temp = zonal_stats({"lst": hot_ground}, labels)  # average per ward
+    ward_temp.head()
+    return ward_temp, wards
 
 
 @app.cell(hide_code=True)
-def _(charts, ward_heat, wards):
-    _g = charts.ward_shapes(wards, ward_heat.reset_index().rename(columns={"lst_mean": "lst"}))
+def _(charts, ward_temp, wards):
+    _g = charts.ward_shapes(wards, ward_temp.reset_index().rename(columns={"lst_mean": "lst"}))
     charts.ward_map(_g, {"built-up surface temperature": "lst"}, "°C")
     return
 
 
 @app.cell(hide_code=True)
-def _(mo, ward_heat, wards):
-    _t = ward_heat["lst_mean"]
+def _(mo, ward_temp, wards):
+    _t = ward_temp["lst_mean"]
     _names = wards.set_index("ward_uid")["label"]
     mo.md(f"""
-    **{_names[_t.idxmax()]}** is the hottest ward ({_t.max():.1f} °C), **{_names[_t.idxmin()]}** the coolest ({_t.min():.1f} °C): {_t.max() - _t.min():.1f} °C apart.
-
-    ## Does the 0.5 matter?
-    """)
-    return
-
-
-@app.cell
-def _(built_frac, labels, lst_day, np, pd, ward_heat, zonal_stats):
-    rules = pd.DataFrame({
-        "every square": zonal_stats({"lst": lst_day}, labels)["lst_mean"],
-        "built ≥ 0.5": ward_heat["lst_mean"],
-        "built ≥ 0.8": zonal_stats({"lst": np.where(built_frac >= 0.8, lst_day, np.nan)}, labels)["lst_mean"],
-    })
-    rules.describe().round(1)
-    return (rules,)
-
-
-@app.cell(hide_code=True)
-def _(mo, rules):
-    def _same_top(a, b, n=10):
-        return len(set(rules[a].nlargest(n).index) & set(rules[b].nlargest(n).index))
-
-    mo.md(f"""
-    0.5 or 0.8 barely matters ({_same_top("built ≥ 0.5", "built ≥ 0.8")} of the 10 hottest wards stay the same); using every square lets in fields and lakes ({_same_top("every square", "built ≥ 0.5")} of 10 stay).
+    **{_names[_t.idxmax()]}** has the highest built-up surface temperature ({_t.max():.1f} °C), **{_names[_t.idxmin()]}** the lowest ({_t.min():.1f} °C): {_t.max() - _t.min():.1f} °C apart.
 
     ## Try it
 
@@ -286,7 +281,7 @@ def _(catalog):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    3. MODIS by day: change `LST_Night_1km` to `LST_Day_1km`.
+    3. MODIS surface temperature by day: change `LST_Night_1km` to `LST_Day_1km`.
     """)
     return
 
@@ -300,7 +295,7 @@ def _(catalog, charts, np):
     _day = _stac.load([i for i in _items if i.id.startswith("MOD")][:1], bands=["LST_Day_1km"],
                       bbox=[77.45, 12.82, 77.80, 13.155], crs="EPSG:32643", resolution=1000)
     _dn = _day["LST_Day_1km"].values[0].astype("float32")
-    charts.image(np.where(_dn > 0, _dn * 0.02 - 273.15, np.nan))
+    charts.image(np.where(_dn > 0, _dn * 0.02 - 273.15, np.nan), "surface temperature, °C")
     return
 
 

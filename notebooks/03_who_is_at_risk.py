@@ -27,31 +27,33 @@ def _(mo):
 
     # Who is at risk?
 
-    <div class="lead">Heat is a risk where it meets people who can't escape it:
-    risk = <b>heat × crowding × lack of shade</b>.</div>
+    <div class="lead">A hot surface is a risk where people are packed in without shade:
+    risk = <b>surface temperature × crowding × lack of shade</b>.</div>
 
     ## Three maps from space
 
-    Each ingredient is a map made from satellite pictures, on the same 30 m squares. Download them:
+    Each ingredient is a map on the same 30 m squares. People come from the Census 2011 count of each ward, spread inside
+    the ward the way WorldPop's 2025 map spreads them: a model that puts people where satellite photos show buildings.
+    Download them:
     """)
     return
 
 
 @app.cell
 def _(datapack):
-    day_heat = datapack.layer("lst_day")  # °C, Landsat by day (lesson 1)
-    night_heat = datapack.layer("lst_night")  # °C, MODIS at night (lesson 1)
-    trees = datapack.layer("canopy_frac")  # 0-1 tree cover, from sharp satellite photos
-    people = datapack.layer("pop")  # people per square (Census 2011 + WorldPop)
-    return day_heat, night_heat, people, trees
+    day_surface_temp = datapack.layer("lst_day")  # °C, Landsat at 10:40 am (lesson 1)
+    night_surface_temp = datapack.layer("lst_night")  # °C, MODIS at night (lesson 1)
+    trees = datapack.layer("canopy_frac")  # 0-1 tree cover, Meta/WRI tree heights (lesson 2)
+    people = datapack.layer("pop")  # people per square (Census 2011 + WorldPop 2025)
+    return day_surface_temp, night_surface_temp, people, trees
 
 
 @app.cell(hide_code=True)
-def _(charts, day_heat, people, trees):
+def _(charts, day_surface_temp, people, trees):
     charts.images({
-        "Heat by day · Landsat": day_heat,
-        "Trees · Meta's map from satellite photos": (trees * 100, "% tree cover", charts.TREES),
-        "People · WorldPop, from mapped buildings": (people / 0.09, "people per hectare", charts.PEOPLE),
+        "Surface temperature, 10:40 am · Landsat": (day_surface_temp, "surface temperature, °C", charts.HEAT),
+        "Trees · Meta/WRI tree heights": (trees * 100, "% tree cover", charts.TREES),
+        "People · Census 2011 + WorldPop": (people / 0.09, "people per hectare", charts.PEOPLE),
     })
     return
 
@@ -73,14 +75,14 @@ def _(mo):
 
 
 @app.cell
-def _(datapack, day_heat, load_wards, night_heat, np, people, trees, ward_labels, zonal_stats):
+def _(datapack, day_surface_temp, load_wards, night_surface_temp, np, people, trees, ward_labels, zonal_stats):
     wards = load_wards()
     labels = ward_labels(wards, datapack.grid30())  # each square -> its ward
     built_up = datapack.layer("built_frac") >= 0.5  # lesson 1's rule
 
     f = zonal_stats({
-        "day_heat": np.where(built_up, day_heat, np.nan),
-        "night_heat": night_heat,
+        "day_surface_temp": np.where(built_up, day_surface_temp, np.nan),
+        "night_surface_temp": night_surface_temp,
         "trees": trees,
         "people_per_ha": people / 0.09,
     }, labels).rename(columns=lambda c: c.removesuffix("_mean"))
@@ -94,37 +96,37 @@ def _(mo):
     mo.md(r"""
     ## Three ingredients, one score
 
-    Turn each column into a rank among wards: heat 0.88 means hotter than 88 % of wards.
+    Turn each column into a rank among wards: surface temperature 0.88 means a hotter surface than 88 % of wards.
     """)
     return
 
 
 @app.cell
 def _(f):
-    heat = (f.day_heat.rank(pct=True) + f.night_heat.rank(pct=True)) / 2  # day and night
+    surface_temp = (f.day_surface_temp.rank(pct=True) + f.night_surface_temp.rank(pct=True)) / 2  # day and night
     crowding = f.people_per_ha.rank(pct=True)
     no_shade = (-f.trees).rank(pct=True)  # less tree cover = higher
 
-    risk = heat * crowding * no_shade  # high only if all three are high
-    return crowding, heat, no_shade, risk
+    risk = surface_temp * crowding * no_shade  # high only if all three are high
+    return crowding, no_shade, risk, surface_temp
 
 
 @app.cell(hide_code=True)
-def _(charts, crowding, f, heat, no_shade, risk, wards):
+def _(charts, crowding, f, no_shade, risk, surface_temp, wards):
     from wardheat.indices import classify
 
-    table = f.assign(H=heat, E=crowding, V=no_shade, score=risk, risk=classify(risk)).reset_index()
-    g = charts.ward_shapes(wards, table, keep=["H", "E", "V", "risk", "day_heat", "night_heat", "people_per_ha", "trees"])
+    table = f.assign(H=surface_temp, E=crowding, V=no_shade, score=risk, risk=classify(risk)).reset_index()
+    g = charts.ward_shapes(wards, table, keep=["H", "E", "V", "risk", "day_surface_temp", "night_surface_temp", "people_per_ha", "trees"])
     charts.ingredient_maps(g)
     return (g,)
 
 
 @app.cell(hide_code=True)
-def _(crowding, f, heat, mo, no_shade, risk):
+def _(crowding, f, mo, no_shade, risk, surface_temp):
     _w = risk.idxmax()
     mo.md(f"""
-    **{f.ward[_w]}** is hotter than {heat[_w]:.0%} of wards, more crowded than {crowding[_w]:.0%} and
-    less shaded than {no_shade[_w]:.0%}: {heat[_w]:.2f} × {crowding[_w]:.2f} × {no_shade[_w]:.2f} =
+    **{f.ward[_w]}** has a hotter surface than {surface_temp[_w]:.0%} of wards, is more crowded than {crowding[_w]:.0%} and
+    less shaded than {no_shade[_w]:.0%}: {surface_temp[_w]:.2f} × {crowding[_w]:.2f} × {no_shade[_w]:.2f} =
     **{risk[_w]:.2f}**, the city's highest risk.
 
     ## Your weights
@@ -151,8 +153,8 @@ def _(mo):
 
 
 @app.cell
-def _(crowding, f, heat, no_shade, risk):
-    plain = (heat + crowding + no_shade) / 3  # a plain average instead of multiplying
+def _(crowding, f, no_shade, risk, surface_temp):
+    plain = (surface_temp + crowding + no_shade) / 3  # a plain average instead of multiplying
     compare = f[["ward"]].assign(multiplied=risk.rank(ascending=False), plain=plain.rank(ascending=False))
     compare.assign(moved=compare.multiplied - compare.plain).nlargest(10, "moved")
     return

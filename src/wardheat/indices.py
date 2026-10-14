@@ -1,7 +1,7 @@
-"""Ward heat risk = heat × crowding × lack of shade (hazard × exposure × vulnerability, IPCC AR6).
+"""Ward heat risk = surface temperature × crowding × lack of shade (hazard × exposure × vulnerability, IPCC AR6).
 
-Each ingredient is a rank among the city's wards, from 0 to 1: heat 0.88 means hotter than 88 % of
-wards (percentile ranks, as in the US CDC's Social Vulnerability Index). Multiplying them means a
+Each ingredient is a rank among the city's wards, from 0 to 1: surface temperature 0.88 means a hotter
+surface (satellite) than 88 % of wards (percentile ranks, as in the US CDC's Social Vulnerability Index). Multiplying them means a
 ward only scores high when all three are high. Top 30 % of wards → High, next 30 % → Medium, the
 rest → Low.
 """
@@ -37,8 +37,8 @@ def ward_table(wards=None) -> pd.DataFrame:
     wards = wards if wards is not None else load_wards()
     labels = ward_labels(wards, datapack.grid30())
     built_up = datapack.layer("built_frac") >= 0.5
-    f = zonal_stats({"day_heat": np.where(built_up, datapack.layer("lst_day"), np.nan),
-                     "night_heat": datapack.layer("lst_night"),
+    f = zonal_stats({"day_surface_temp": np.where(built_up, datapack.layer("lst_day"), np.nan),
+                     "night_surface_temp": datapack.layer("lst_night"),
                      "trees": datapack.layer("canopy_frac"),
                      "people_per_ha": datapack.layer("pop") / 0.09}, labels)
     f = f.rename(columns=lambda c: c.removesuffix("_mean"))
@@ -47,8 +47,8 @@ def ward_table(wards=None) -> pd.DataFrame:
 
 
 def ward_risk(f: pd.DataFrame) -> pd.DataFrame:
-    """Heat, crowding and lack of shade as ranks among wards (0-1), their product and the class."""
-    H = (f["day_heat"].rank(pct=True) + f["night_heat"].rank(pct=True)) / 2  # hotter by day and at night
+    """Surface temperature, crowding and lack of shade as ranks among wards (0-1), their product and the class."""
+    H = (f["day_surface_temp"].rank(pct=True) + f["night_surface_temp"].rank(pct=True)) / 2  # hotter surface (satellite) by day and at night
     E = f["people_per_ha"].rank(pct=True)  # more crowded
     V = (-f["trees"]).rank(pct=True)  # less tree shade
     score = H * E * V
