@@ -109,8 +109,9 @@ def _(levels, mo):
 
     ## Tomorrow's forecast
 
-    Open-Meteo gives each coming day's highest and lowest air temperature from global weather models; we subtract the
-    models' average difference from ERA5 for that month, so the forecast is on the same scale as the 35 years:
+    Open-Meteo gives each coming day's highest and lowest air temperature from the sharpest weather model for the place,
+    for Bengaluru mostly ECMWF's 9 km model; we subtract its average difference from ERA5 for that month, so the forecast
+    is on the same scale as the 35 years:
     """)
     return
 

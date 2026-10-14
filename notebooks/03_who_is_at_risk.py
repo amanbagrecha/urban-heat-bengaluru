@@ -33,7 +33,8 @@ def _(mo):
     ## Three maps from space
 
     Each ingredient is a map on the same 30 m squares. People come from the Census 2011 count of each ward, spread inside
-    the ward the way WorldPop's 2025 map spreads them: a model that puts people where satellite photos show buildings.
+    the ward the way WorldPop's 2025 map spreads them: a computer model that places people only in areas mapped as built up
+    from satellite images.
     Download them:
     """)
     return
