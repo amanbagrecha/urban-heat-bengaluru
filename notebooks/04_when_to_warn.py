@@ -27,7 +27,7 @@ def _(mo):
     # When should we warn?
 
     <div class="lead">Satellites can't see tomorrow, so the alert uses <b>air temperature</b> (2 m above the ground):
-    is tomorrow's forecast unusually high for this time of year, and hot for Bengaluru at all?</div>
+    will tomorrow's forecast high cross Bengaluru's heat gauge?</div>
 
     First, each day's highest (`tmax`) and lowest (`tmin`) air temperature since 1991 from ERA5, Europe's hour-by-hour
     rebuild of past weather on ~25 km squares (it reads about 1.5 °C below the city's weather station on summer afternoons).
