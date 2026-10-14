@@ -29,16 +29,12 @@ def _(mo):
     <div class="lead">Satellites can't see tomorrow, so the alert uses <b>air temperature</b> (2 m above the ground):
     is tomorrow's forecast unusually high for this time of year, and hot for Bengaluru at all?</div>
 
-    First, 35 years of each day's highest (`tmax`) and lowest (`tmin`) air temperature from ERA5: ECMWF, Europe's weather
-    centre, rebuilds past weather hour by hour on ~25 km squares by feeding station, balloon and satellite readings into a
-    weather model. A 25 km square mixes town and countryside, so it reads about 1.5 °C below the city's weather station on
-    March–May afternoons.
+    First, each day's highest (`tmax`) and lowest (`tmin`) air temperature since 1991 from ERA5, Europe's hour-by-hour
+    rebuild of past weather on ~25 km squares (it reads about 1.5 °C below the city's weather station on summer afternoons).
 
-    **See it, get it.** [Climate Pulse](https://pulse.climate.copernicus.eu/) maps ERA5's air temperature for the whole
-    world, day by day; the full data is on the
-    [Climate Data Store](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels) (free account), and
-    [Open-Meteo](https://open-meteo.com/en/docs/historical-weather-api) gives any point's daily values as a CSV, which is
-    what we download for Bengaluru (35 years in 0.2 MB):
+    **See it, get it.** [Climate Pulse](https://pulse.climate.copernicus.eu/) maps ERA5 for the whole world, day by day, and
+    [Open-Meteo](https://open-meteo.com/en/docs/historical-weather-api) gives any place's daily values as a CSV, which is what
+    we download for Bengaluru (35 years in 0.2 MB):
     """)
     return
 
@@ -58,40 +54,49 @@ def _(build):
 
 @app.cell(hide_code=True)
 def _(era5, mo):
-    _hot = era5["tmax"].idxmax()
     _n40 = int((era5["tmax"] >= 40).sum())
     mo.md(f"""
     ## 40 °C never comes
 
-    Bengaluru's highest air temperature (ERA5) since 1991 was **{era5['tmax'].max():.1f} °C** on {_hot:%d %B %Y}, and
-    {"no day" if _n40 == 0 else f"only {_n40} days"} reached 40 °C, so India's 40 °C rule would never warn the city. Instead we
-    ask how unusual a day is for its time of year:
+    In 35 years {"no day" if _n40 == 0 else f"only {_n40} days"} in Bengaluru reached 40 °C, so India's 40 °C rule would never
+    warn the city. Instead we ask how unusual a day is for its time of year:
     """)
     return
 
 
 @app.cell
 def _(era5, warning):
-    # what counts as hot for each date, from the 1991-2020 record
+    # for every date: how hot the days around it were in 1991-2020
     normal = warning.climatology(era5, base=(1991, 2020))
 
-    # a level (0-4) for every day since 1991
+    # a level for every day since 1991: below the alert line, warm, hot, very hot or extreme
     levels = warning.heatrisk(era5.loc["1991":], normal)
     return levels, normal
 
 
 @app.cell(hide_code=True)
-def _(charts, era5, normal):
-    charts.levels_explainer(era5, normal, day="2024-04-28")
+def _(era5, mo):
+    example = era5.loc[str(era5.index[-1].year), "tmax"].idxmax()  # our example: this year's hottest day
+    mo.md(f"""
+    For each date we line up the days around it in 1991–2020 (the 30 years weather services use as "normal"): a day
+    hotter than 90 % of them is warm, 95 % hot, 98 % very hot, 99.5 % extreme. Here is {example:%d %B %Y}, this year's
+    hottest day:
+    """)
+    return (example,)
+
+
+@app.cell(hide_code=True)
+def _(charts, era5, example, normal):
+    charts.levels_explainer(era5, normal, day=example)
     return
 
 
 @app.cell(hide_code=True)
 def _(mo, normal):
     mo.md(f"""
-    The night's lowest air temperature is judged the same way, and hot days and nights in a row add a level. A day must
-    also be among the hottest 10 % of the whole year ({normal["tmax_ann_p90"].iloc[0]:.1f} °C by day), so a warm October
-    day stays below the alert line. Every March–May since 1991:
+    A day must also beat {normal["tmax_ann_p90"].iloc[0]:.1f} °C, hotter than 90 % of all days of the year, so a warm
+    October day never warns; nights are judged the same way, and hot days and nights in a row add a level. Every March–May
+    since 1991:
     """)
     return
 
@@ -110,16 +115,13 @@ def _(levels, mo):
     _red = levels["level"] >= 3
     _run = _red.groupby((~_red).cumsum()).cumsum()
     mo.md(f"""
-    {_run.idxmax():%Y} had the longest run of Red or Magenta ({_run.max()} days in a row). Orange-or-worse days per season:
-    **{_dec['1991s']:.1f}** on average in 1991–2000, **{_dec['2011s']:.1f}** in 2011–2020.
+    {_run.idxmax():%Y} had the longest run of very hot or extreme days ({_run.max()} in a row). Hot-or-worse days each
+    March–May: **{_dec['1991s']:.1f}** a year on average in 1991–2000, **{_dec['2011s']:.1f}** in 2011–2020.
 
     ## Tomorrow's forecast
 
-    Open-Meteo gives each coming day's highest and lowest air temperature from the sharpest weather model for the place,
-    for Bengaluru ECMWF's 9 km model; we subtract the forecast models' average difference from ERA5 for that month
-    (2022–2026), so the forecast is on the same scale as the 35 years. [ECMWF's charts](https://charts.ecmwf.int/) map
-    this forecast for the whole world, and Open-Meteo's [forecast page](https://open-meteo.com/en/docs) gives any point's
-    as a table or CSV:
+    Open-Meteo's free [forecast](https://open-meteo.com/en/docs) gives the coming days' highest and lowest air temperature;
+    we shift it slightly (by under 1.5 °C) so it reads like ERA5, the record we compare it with:
     """)
     return
 
@@ -128,7 +130,8 @@ def _(levels, mo):
 def _(climate, normal, warning):
     forecast = climate.forecast(days=7, past_days=2)  # highest and lowest air temperature, today and the next 6 days, °C
     week = warning.heatrisk(forecast, normal).loc[climate.today():]  # from today on
-    week[["tmax", "tmax_normal", "tmax_alert", "tmin", "level", "in words"]].round(1)  # normal = the average for the date
+    week[["tmax", "tmax_normal", "tmax_alert", "tmin", "in words"]].round(1).rename(columns={
+        "tmax": "high °C", "tmax_normal": "average high °C", "tmax_alert": "alert line °C", "tmin": "low °C", "in words": "level"})
     return (week,)
 
 
@@ -154,7 +157,7 @@ def _(era5, indices, levels, pd, warning, week):
 
     tomorrow = week.iloc[1]  # row 0 is today
     this_year = era5.loc[str(era5.index[-1].year), "tmax"]
-    hot_day = levels.loc[this_year.idxmax()]  # this year's highest air temperature (ERA5)
+    hot_day = levels.loc[this_year.idxmax()]  # the example above: this year's hottest day (ERA5)
     alerts = pd.DataFrame({
         "tomorrow": warning.ward_alerts(int(tomorrow.level), wards_risk),
         "hot_day": warning.ward_alerts(int(hot_day.level), wards_risk),
@@ -212,7 +215,9 @@ def _(mo, send):
 
     ## Try it
 
-    1. Click 2016 and 2019 in the calendar. 2. Three hot days in a row instead of two:
+    1. Click 2016 and 2019 in the calendar.
+
+    2. Add a level only after three hot days and nights in a row, instead of two:
     """)
     return
 
@@ -221,14 +226,14 @@ def _(mo, send):
 def _(era5, levels, normal, pd, warning):
     three_in_a_row = warning.heatrisk(era5.loc["1991":], normal, duration_days=3)  # change 3 here
     _red = lambda lv: (lv["level"] >= 3).groupby(lv.index.year).sum()
-    pd.DataFrame({"2 in a row": _red(levels), "3 in a row": _red(three_in_a_row)}).loc[2010:].rename_axis("Red or worse days")
+    pd.DataFrame({"2 in a row": _red(levels), "3 in a row": _red(three_in_a_row)}).loc[2010:].rename_axis("very hot or worse days")
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    3. "Normal" from 2001–2025 instead of 1991–2020:
+    3. Compare with 2001–2025 instead of 1991–2020:
     """)
     return
 
@@ -239,9 +244,9 @@ def _(era5, levels, pd, warning):
     recent_levels = warning.heatrisk(era5.loc["1991":], recent_normal)
     _season = lambda lv: lv[lv.index.month.isin([3, 4, 5])]
     pd.DataFrame({
-        "normal = 1991–2020": _season(levels).groupby(_season(levels).index.year)["level"].apply(lambda x: (x >= 2).sum()),
-        "normal = 2001–2025": _season(recent_levels).groupby(_season(recent_levels).index.year)["level"].apply(lambda x: (x >= 2).sum()),
-    }).loc[2016:].rename_axis("Orange or worse days, Mar–May")
+        "compared with 1991–2020": _season(levels).groupby(_season(levels).index.year)["level"].apply(lambda x: (x >= 2).sum()),
+        "compared with 2001–2025": _season(recent_levels).groupby(_season(recent_levels).index.year)["level"].apply(lambda x: (x >= 2).sum()),
+    }).loc[2016:].rename_axis("hot or worse days, Mar–May")
     return
 
 
