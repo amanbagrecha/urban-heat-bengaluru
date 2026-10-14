@@ -15,8 +15,7 @@ def _():
 
     from wardheat import build, charts, datapack
 
-    px = datapack.table("pixels")  # the city in 240 m squares
-    return build, charts, mo, np, px
+    return build, charts, datapack, mo, np
 
 
 @app.cell(hide_code=True)
@@ -29,9 +28,32 @@ def _(mo):
     <div class="lead">Two streets a kilometre apart can differ by 8 °C on the same morning. Most of
     that difference comes down to what covers the ground.</div>
 
-    Below, every dot is one 240 m square of the city: how much of it is under tree canopy, and how
-    hot its surface was at 10:40 am. The box starts on the leafiest squares, and the map shows where
-    they are. Drag your own box anywhere on the scatter.
+    We use the same 240 m squares as in lesson 1 (each about the size of eight football fields).
+    Besides temperature, each square knows what covers it, measured from satellite pictures:
+    `canopy` is the share under trees, `built` under buildings and roads, `water` under lakes.
+    Let's download them (or read them from your laptop if lesson 1 already did):
+    """)
+    return
+
+
+@app.cell
+def _(datapack):
+    px = datapack.table("pixels")  # the city in 240 m squares
+    px[["ward", "lst_day", "canopy", "built", "water"]].head()
+    return (px,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## More trees, cooler ground
+
+    In the chart on the left, every dot is one of those squares. **Left to right**: how much of it is
+    under trees. **Bottom to top**: how hot its ground was at 10:40 am. The dots slope down to the
+    right, and the dashed line shows the trend: the more trees, the cooler.
+
+    The box starts on the leafiest squares; the map on the right shows where they are. Drag your own
+    box, for example over the hot squares with no trees at the top left.
     """)
     return
 
@@ -55,10 +77,10 @@ def _(mo):
     water, which carries heat away as it evaporates. Lakes do the second even better: they are the
     coolest squares in the city. Bare soil and dark roofs do neither, and they are the hottest.
 
-    ## How much cooler, per tree?
+    ## How much cooler?
 
-    A straight line through the built-up squares tells us how much temperature drops, on average,
-    as tree cover goes up:
+    Let's put a number on the dashed line, using only the squares that are mostly buildings, where
+    people live:
     """)
     return
 
@@ -79,11 +101,13 @@ def _(built, mo, slope):
     **{-slope * 0.1:.1f} °C cooler**. A street with 40 % canopy instead of 5 % is about
     **{-slope * 0.35:.0f} °C cooler** at 10:40 am.
 
-    This is a pattern, not proof: leafy neighbourhoods also tend to be older, less dense and better
-    off. But the physics behind it is well understood, and it matches what you feel walking out of
-    the sun into a tree-lined street.
+    Leafy areas also differ in other ways (older, less crowded), so this is a pattern, not proof. But
+    it matches what you feel walking out of the sun into a tree-lined street.
 
     ## Day and night tell different stories
+
+    Each row is a kind of place. The orange dot is the day, the blue dot the night. Right of the
+    dashed line means warmer than the city's average, left means cooler.
     """)
     return
 
@@ -97,13 +121,9 @@ def _(charts, px):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Farmland is the hottest ground in the morning but cools fast once the sun sets. Built-up areas
-    hold the day's heat in concrete and brick and give it back at night. This is the *urban heat
-    island*. It shows up at night, which is why we will use both day and night heat when we score
-    risk in the next lesson.
-
-    (The night data comes in 1 km pixels, so a small park or lake gets blurred into its
-    surroundings at night. That is part of why the night dots sit so close together.)
+    Farmland is the hottest ground in the morning but cools fast after sunset. Buildings soak up
+    the day's heat in concrete and brick and give it back at night: this is the **urban heat
+    island**. That is why the next lesson uses both day and night heat.
 
     ## Try it
 

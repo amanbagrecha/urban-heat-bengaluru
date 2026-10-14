@@ -18,7 +18,9 @@
 - Under each chart built from a prepared file, "How this file was made" folds out the code and what
   making it from scratch downloads. Open one in lesson 1 to show nothing is hidden.
 - Each lesson ends with "Try it" prompts, each with a ready-made cell to edit, about ten minutes in total. Cut those before cutting the charts.
-- Lesson 4's live forecast is usually Green outside March–May; the 2024 season in the calendar carries the story.
+- The Welcome page and lesson 4 show tomorrow's real forecast. Outside March–May that map is usually all
+  "No alert"; the map beside it (the last hot day in the record) shows how alerts differ by ward.
+- Lesson 1 reads one Landsat morning and one MODIS night live. If the Wi-Fi is weak, run those two on the projector.
 
 ## Points that land
 

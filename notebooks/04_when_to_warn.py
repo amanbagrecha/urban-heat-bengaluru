@@ -29,16 +29,17 @@ def _(mo):
     <div class="lead">The maps tell us where. A warning system also needs to know when: is tomorrow
     unusually hot for Bengaluru, at this time of year?</div>
 
-    For that we need air temperature, every day, for decades. ERA5 is a reconstruction of the
-    world's weather since 1940, built by the European weather centre from every observation it
-    has. Open-Meteo serves it for free. The data pack has the city centre from 1991 to today:
+    For that we need the air temperature of every day, for decades. **ERA5** is a record of the
+    weather everywhere on Earth since 1940, rebuilt by Europe's weather centre from millions of
+    past measurements. The free service Open-Meteo serves it. Let's download the daily high
+    (`tmax`) and low (`tmin`) for the city centre since 1991:
     """)
     return
 
 
 @app.cell
 def _(datapack):
-    era5 = datapack.table("era5_daily")  # daily max and min air temperature
+    era5 = datapack.table("era5_daily")  # daily highest and lowest air temperature, °C
     era5[["tmax", "tmin"]].tail()
     return (era5,)
 
@@ -67,18 +68,17 @@ def _(era5, mo):
 
     ## A local warning scale
 
-    We borrow the idea behind HeatRisk, the US National Weather Service's warning scale on
-    [heat.gov](https://www.heat.gov). For every date we look at the same date ±15 days in
-    1991–2020 and find how hot the hottest 10 %, 5 %, 2 % and 0.5 % of days were. A day climbs one
-    level for every one of those bars its maximum *or* its night minimum clears:
+    For every date, we look at the same weeks of the year in 1991–2020 and ask how often it was
+    this hot. This is how HeatRisk, the US weather service's scale on [heat.gov](https://www.heat.gov),
+    works:
 
-    | Level | In words | The day or night is hotter than… | Who is at risk |
+    | Level | In words | The day (or night) is hotter than… | Who is at risk |
     |---|---|---|---|
     | 0 Green | normal | – | almost nobody |
-    | 1 Yellow | warm for the season | 90 % of days for that date | the most heat-sensitive |
-    | 2 Orange | hot | 95 % | sensitive groups, anyone outdoors for long |
-    | 3 Red | very hot | 98 % | anyone without cooling or water |
-    | 4 Magenta | extreme | 99.5 % | everyone, rare and long |
+    | 1 Yellow | warm for the season | 9 in 10 days at that time of year | the most heat-sensitive |
+    | 2 Orange | hot | 19 in 20 | old people, small children, anyone working outdoors |
+    | 3 Red | very hot | 49 in 50 | anyone without cooling or water |
+    | 4 Magenta | extreme | 199 in 200 | everyone |
 
     Hot days *and* hot nights in a row raise the level by one: heat that doesn't let up is the
     dangerous kind.
@@ -91,7 +91,7 @@ def _(era5, warning):
     # what counts as hot for each date, from the 1991-2020 record
     normal = warning.climatology(era5, base=(1991, 2020))
 
-    # a HeatRisk level for every day since 1991
+    # a level (0-4) for every day since 1991
     levels = warning.heatrisk(era5.loc["1991":], normal)
     return levels, normal
 
@@ -115,45 +115,33 @@ def _(levels, mo):
     Notice also how rare the colours are. A warning that fires every week gets ignored, so a good
     scale stays green most of the time.
 
-    ## This week's forecast
+    ## Tomorrow's forecast
 
-    The same rules work on a forecast. This asks Open-Meteo for the next week. Forecast models run
-    about 1 °C warmer than ERA5 here in spring, so we take that bias off before comparing.
+    The same rules work on a forecast. Let's download the next week's forecast from Open-Meteo
+    ([api.open-meteo.com](https://open-meteo.com)) and give each day a level:
     """)
     return
 
 
 @app.cell
-def _(climate, normal, pd, warning):
-    import requests
-    from requests.adapters import HTTPAdapter, Retry
-
-    web = requests.Session()  # tries again, up to 4 times, if the connection drops or the service is busy
-    web.mount("https://", HTTPAdapter(max_retries=Retry(total=4, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])))
-    reply = web.get("https://api.open-meteo.com/v1/forecast", params={
-        "latitude": 12.98, "longitude": 77.59, "timezone": "Asia/Kolkata",
-        "daily": "temperature_2m_max,temperature_2m_min", "past_days": 5,
-    }, timeout=30).json()["daily"]
-    forecast = pd.DataFrame(
-        {"tmax": reply["temperature_2m_max"], "tmin": reply["temperature_2m_min"]},
-        index=pd.to_datetime(reply["time"]),
-    )
-    forecast = climate.remove_bias(forecast)
-    week = warning.heatrisk(forecast, normal).loc[pd.Timestamp.today().normalize():]
-    week[["tmax", "tmin", "name"]].round(1)
-    return
+def _(climate, normal, warning):
+    forecast = climate.forecast(days=7, past_days=2)  # highs and lows for the next 7 days, °C
+    week = warning.heatrisk(forecast, normal).loc[climate.today():]  # from today on
+    week[["tmax", "tmin", "level", "in words"]].round(1)
+    return (week,)
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Outside March–May it rarely goes above Yellow. Run it again in April.
+    (Forecast models run about 1 °C warmer than ERA5 here, so `climate.forecast` takes that off
+    before we compare.)
 
     ## One city level, 369 ward alerts
 
     The forecast gives one level for the whole city. But the same weather is more dangerous in a
-    crowded, treeless ward than in a leafy one. So each ward's alert combines the city level with
-    the ward's risk class from lesson 3:
+    crowded, treeless ward than in a leafy one. So each ward's alert combines the city's level with
+    the ward's risk from lesson 3:
 
     | Tomorrow is… | normal | warm | hot | very hot | extreme |
     |---|---|---|---|---|---|
@@ -161,16 +149,32 @@ def _(mo):
     | **Medium-risk ward** | no alert | take care | take care | heat alert | emergency |
     | **Low-risk ward** | no alert | no alert | take care | heat alert | emergency |
 
-    Pick a level and see who gets warned.
+    Here is tomorrow, for real, next to the last hot day in our record:
     """)
     return
 
 
+@app.cell
+def _(datapack, indices, levels, pd, warning, week):
+    wards_risk = indices.ward_risk(datapack.table("ward_features"))["risk"]  # High / Medium / Low, lesson 3
+
+    tomorrow = week.iloc[1]  # row 0 is today
+    hot_day = levels[levels.level >= 2].iloc[-1]  # the last day that was "hot" or worse
+    alerts = pd.DataFrame({
+        "tomorrow": warning.ward_alerts(int(tomorrow.level), wards_risk),
+        "hot_day": warning.ward_alerts(int(hot_day.level), wards_risk),
+    })
+    alerts.apply(lambda alert: alert.value_counts()).fillna(0).astype(int)  # how many wards get each alert
+    return alerts, hot_day, tomorrow
+
+
 @app.cell(hide_code=True)
-def _(charts, datapack, indices, load_wards):
-    _f = datapack.table("ward_features")
-    _g = charts.ward_shapes(load_wards(), _f.join(indices.ward_risk(_f)), keep=["risk"])
-    charts.alert_map(_g, level=2)
+def _(alerts, charts, datapack, hot_day, load_wards, tomorrow):
+    _g = charts.ward_shapes(load_wards(), datapack.table("ward_features")[["ward_uid"]].join(alerts), keep=["tomorrow", "hot_day"])
+    charts.alert_maps(_g, [
+        ("tomorrow", f"Tomorrow, {tomorrow.name:%d %b}", f"forecast {tomorrow.tmax:.0f} °C: {tomorrow['in words']}"),
+        ("hot_day", f"{hot_day.name:%d %b %Y}", f"{hot_day.tmax:.1f} °C: {hot_day['in words']}"),
+    ])
     return
 
 

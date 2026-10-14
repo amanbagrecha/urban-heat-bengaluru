@@ -42,6 +42,20 @@ def _to_frame(js: dict) -> pd.DataFrame:
     )
 
 
+def _session() -> requests.Session:
+    """A requests session that tries again (up to 4 times) when the connection drops or the service is busy."""
+    from requests.adapters import HTTPAdapter, Retry
+
+    s = requests.Session()
+    s.mount("https://", HTTPAdapter(max_retries=Retry(total=4, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])))
+    return s
+
+
+def today() -> pd.Timestamp:
+    """Today's date in Bengaluru (computers in other time zones may already be on another day)."""
+    return pd.Timestamp.now(tz="Asia/Kolkata").normalize().tz_localize(None)
+
+
 def era5_daily(start: str = "1991-01-01", end: str = "2025-12-31", point=CITY_POINT, model: str = "era5") -> pd.DataFrame:
     """Daily ERA5 history for one point (°C, %)."""
     r = requests.get(
@@ -62,7 +76,7 @@ def forecast(days: int = 7, point=CITY_POINT, past_days: int = 0, bias_correct: 
     climatology, we subtract the monthly mean difference (``forecast_bias`` table in the
     data pack) — otherwise model bias alone would raise false alarms.
     """
-    r = requests.get(
+    r = _session().get(
         "https://api.open-meteo.com/v1/forecast",
         params=dict(latitude=point[0], longitude=point[1], daily=",".join(FORECAST_VARS),
                     timezone="Asia/Kolkata", forecast_days=days, past_days=past_days),

@@ -30,22 +30,35 @@ def _(mo):
     <div class="lead">A scorching field with nobody in it is not a problem. Heat becomes a risk
     where it meets people who can't get away from it.</div>
 
-    Climate scientists (the IPCC) write this as **risk = hazard × exposure × vulnerability**. For
-    each ward we use one simple measure of each:
+    Climate scientists write this as **risk = hazard × exposure × vulnerability**. In plain words,
+    we ask three questions about each ward:
 
-    - **Hazard: how hot it gets.** Built-up surfaces by day, plus the night.
-    - **Exposure: how many people live there.** People per km².
-    - **Vulnerability: how little protection they have.** Here, how little tree shade there is.
-
-    Real risk indices also use age, income, housing and health records. Shade is the one
-    vulnerability we can map for every ward from open satellite data.
+    - **How hot does it get?** Its built-up ground by day, and the night (lesson 1).
+    - **How many people live there?** People per km².
+    - **How little shade do they have?** The less tree cover, the worse (lesson 2).
 
     ## Where people live
 
-    The 2011 Census counted every ward, but it is 15 years old and says nothing about where people
-    live *inside* a ward. WorldPop's 2025 map has that detail, but it counts about two million fewer
-    people than the Census did in 2011. So we keep each ward's Census total and spread it out
-    following WorldPop's pattern.
+    The 2011 Census counted the people in every ward, but not where they live inside it. WorldPop,
+    a free population map made from satellite pictures of buildings, has that detail. We keep each
+    ward's Census count and spread it out the way WorldPop does. Let's download the result, one row
+    per ward:
+    """)
+    return
+
+
+@app.cell
+def _(datapack):
+    f = datapack.table("ward_features")  # one row per ward: heat, people, trees
+    f[["label", "lst_built", "lst_night", "pop_density", "canopy_frac"]].head()
+    return (f,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    `lst_built` is the daytime heat of built-up ground, `lst_night` the night, `pop_density` people
+    per km², `canopy_frac` the share under trees. Here is where people live, in 240 m squares:
     """)
     return
 
@@ -76,38 +89,32 @@ def _(mo):
 
     ## Three ingredients, one score
 
-    Heat is in °C, people in people per km² and shade in percent, so first we put all three on the
-    same 0–1 scale: 0 means among the lowest 5 % of wards in the city, 1 among the highest 5 %.
-    Then we combine them with a *geometric mean*, which only gives a high score if all three are
-    high.
+    Heat is in °C, people in people per km² and shade in %. To combine them, we first turn each
+    into a score from 0 (the lowest wards in the city) to 1 (the highest). Then we multiply the
+    three, so a ward only scores high when all three are high: a scorching ward where nobody lives
+    stays low.
     """)
     return
 
 
 @app.cell
-def _(datapack, np):
-    f = datapack.table("ward_features")  # one row per ward
-
+def _(f, np):
     def scale(x):
         """0 = among the city's lowest 5 %, 1 = among its highest 5 %."""
         lo, hi = x.quantile([0.05, 0.95])
         return ((x - lo) / (hi - lo)).clip(0.05, 1)
 
     H = (scale(f.lst_built) + scale(f.lst_night)) / 2  # hazard: hot by day and at night
-    E = scale(np.log(f.pop_density))  # exposure: people per km²
+    E = scale(np.log(f.pop_density))  # exposure: people per km² (log: twice as crowded counts more, not double)
     V = scale(-f.canopy_frac)  # vulnerability: the less canopy, the higher
-    risk = (H * E * V) ** (1 / 3) * 100
-    return E, H, V, f, risk
+    risk = (H * E * V) ** (1 / 3) * 100  # multiply; the cube root keeps it on the same 0-100 scale
+    return E, H, V, risk
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Two small choices are worth knowing about. The floor of 0.05 stops one zero from wiping out a
-    ward completely. The logarithm of density means a ward twice as crowded counts as more
-    exposed, but not twice as much.
-
-    Here are the three ingredients on the map. Darker means more risk.
+    Here are the three scores on the map. Darker means more risk.
     """)
     return
 
@@ -127,10 +134,9 @@ def _(mo):
     mo.md(r"""
     ## Your weights
 
-    How much should heat count compared with people or shade? That is a judgement call, not a
-    scientific fact, and it is one a city should argue about in the open. The sliders weight each
-    ingredient (0 leaves it out). The map and the list recompute as you drag. The top 30 % of wards
-    are labelled High.
+    How much should heat count compared with people or shade? There is no right answer: it is a
+    choice a city should discuss in the open. Drag the sliders (0 leaves one out) and the map and
+    the list update. The top 30 % of wards are High risk.
     """)
     return
 

@@ -31,18 +31,25 @@ def _(mo):
     <div class="lead">A thermometer tells you how hot the air is at one spot. A satellite can tell you
     how hot every rooftop, road, park and lake in the city is, all at the same moment.</div>
 
-    ## Satellites see the ground, not the air
+    ## How a satellite sees heat
 
-    Landsat 8 and 9 fly over Bengaluru every eight days at about 10:40 in the morning. Their thermal
-    camera records the heat coming off surfaces: the **land surface temperature**. On an April
-    morning a tar road can be 15 °C hotter than the air above it, and a shaded lawn barely warmer.
-    It is not what your body feels, but it shows which surfaces soak up the sun.
+    **Remote sensing** means measuring something from far away, without touching it. A satellite
+    700 km up can't hold a thermometer to a road. What it can do is record light.
+
+    Everything warm gives off light we can't see, called **thermal infrared**. The hotter a
+    surface, the more of it it gives off; that is how night-vision cameras see people in the dark.
+    Landsat 8 and 9, two NASA satellites, carry a camera for this light. From how strongly each
+    patch of ground glows, we can work out its **land surface temperature**: how hot the roof, road
+    or lawn is. It is not the air temperature you feel: on an April morning a tar road can be 15 °C
+    hotter than the air above it.
+
+    Landsat passes over Bengaluru every 8 days, at about 10:40 in the morning.
 
     ## Finding the pictures
 
-    Satellite images sit in open catalogues that follow a standard called STAC. This asks
-    Microsoft's Planetary Computer for every Landsat pass over the city in March–May 2024 with
-    less than 40 % cloud:
+    Satellite pictures are listed in free online catalogues. They follow one standard, called STAC,
+    so the same code works for many satellites. This asks Microsoft's Planetary Computer for every
+    Landsat picture of Bengaluru from March–May 2024 with less than 40 % cloud:
     """)
     return
 
@@ -58,7 +65,7 @@ def _(pd):
     )
     search = catalog.search(
         collections=["landsat-c2-l2"],
-        bbox=[77.45, 12.82, 77.80, 13.155],  # Bengaluru
+        bbox=[77.45, 12.82, 77.80, 13.155],  # Bengaluru: west, south, east, north
         datetime="2024-03-01/2024-05-31",
         query={
             "platform": {"in": ["landsat-8", "landsat-9"]},
@@ -78,11 +85,11 @@ def _(pd):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Reading one image
+    ## Reading one picture
 
-    Each image is a *Cloud-Optimized GeoTIFF*: a file on the web that lets us read just the pixels
-    over Bengaluru instead of downloading all 200 km of the scene. The file stores whole numbers;
-    one line from the Landsat handbook turns them into degrees.
+    One Landsat picture covers 185 km, far more than the city. The file is stored so that we can
+    download just the part over Bengaluru. It stores the glow as whole numbers; one line from the
+    Landsat handbook turns them into °C.
     """)
     return
 
@@ -92,15 +99,15 @@ def _(datapack, items, np):
     import rasterio
     from rasterio.windows import from_bounds
 
-    # the clearest pass, and the city's edges in metres (UTM 43N, like the image)
+    # the clearest picture, and the city's edges in metres (the same map grid as the picture)
     scene = min(items, key=lambda item: item.properties["eo:cloud_cover"])
     city = datapack.grid30().bounds
 
-    with rasterio.open(scene.assets["lwir11"].href) as image:
+    with rasterio.open(scene.assets["lwir11"].href) as image:  # lwir = the thermal infrared camera
         window = from_bounds(*city, image.transform)
         dn = image.read(1, window=window)  # only the pixels over the city
 
-    # the file stores whole numbers; this turns them into °C
+    # whole numbers -> °C (0 means no data)
     lst = np.where(dn > 0, dn * 0.00341802 + 149.0 - 273.15, np.nan)
     return lst, scene
 
@@ -114,24 +121,83 @@ def _(charts, lst):
 @app.cell(hide_code=True)
 def _(mo, scene):
     mo.md(f"""
-    That is Bengaluru at 10:40 am on {scene.datetime:%d %B %Y}. The pale streaks are lakes and big
-    parks; the dark patches are bare ground, factory roofs and the airport. You just read a
-    satellite image straight from the cloud.
+    That is Bengaluru at 10:40 am on {scene.datetime:%d %B %Y}, in 30 m squares. Pale is cooler:
+    lakes and big parks. Dark is hotter: bare ground, factory roofs and the airport. You just read a
+    satellite picture straight from the cloud.
+
+    ## At night: another satellite
+
+    Landsat only ever passes in the morning. To see the city at night we use **MODIS**, a camera on
+    two other NASA satellites, Terra and Aqua. Together they photograph the whole Earth every day
+    and every night. The catch: their squares are 1 km wide instead of 30 m. Same catalogue, same
+    kind of search; each MODIS file averages up to 8 clear nights:
+    """)
+    return
+
+
+@app.cell
+def _(catalog, np):
+    import odc.stac
+
+    nights = catalog.search(
+        collections=["modis-11A2-061"],  # MODIS surface temperature, 8 days per file
+        bbox=[77.45, 12.82, 77.80, 13.155],
+        datetime="2024-04-01/2024-04-30",
+    ).item_collection()
+    terra = [i for i in nights if i.id.startswith("MOD")][0]  # MOD = Terra, about 10:30 pm
+
+    night = odc.stac.load(
+        [terra], bands=["LST_Night_1km"], bbox=[77.45, 12.82, 77.80, 13.155],
+        crs="EPSG:32643", resolution=1000,  # Landsat's map grid, in 1 km squares
+    )
+    dn_night = night["LST_Night_1km"].values[0].astype("float32")
+    lst_night = np.where(dn_night > 0, dn_night * 0.02 - 273.15, np.nan)  # -> °C
+    return (lst_night,)
+
+
+@app.cell(hide_code=True)
+def _(charts, lst, lst_night):
+    charts.images({"Landsat, 10:40 am, 30 m squares": lst, "MODIS, about 10:30 pm, 1 km squares": lst_night})
+    return
+
+
+@app.cell(hide_code=True)
+def _(lst, lst_night, mo, np):
+    mo.md(f"""
+    The night picture is blocky because each square is 1 km, and it is about
+    {np.nanmean(lst) - np.nanmean(lst_night):.0f} °C cooler. Look at where the warm squares are: at
+    night the centre of the city stays warmest.
 
     ## Five summers in one map
 
-    One morning can mislead: a passing cloud, a breezy day. So the data pack holds the **median**
-    of 44 clear passes from March–May 2022–2026, plus a night version from the MODIS satellites
-    (about 10:30 pm, 1 km pixels). To keep this page light, both are averaged to 240 m squares.
-    Switch between day and night, and hover to see which ward a square belongs to.
+    One morning can mislead: a passing cloud, a windy day. So we repeated what you just did for 44
+    Landsat mornings and 105 MODIS nights over five summers (March–May 2022–2026), and kept the
+    middle value for each spot. That takes about 8 minutes, so we did it in advance and saved the
+    result. Let's download it (once; next time it is read from your laptop):
+    """)
+    return
+
+
+@app.cell
+def _(datapack):
+    squares = datapack.table("pixels")  # 240 m squares, from the workshop GitHub page
+    squares[["ward", "lst_day", "lst_night"]].head()
+    return (squares,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Each row is one 240 m square: the ward it is in, its temperature by day and by night. Switch
+    between day and night on the map, and hover to see the ward.
     """)
     return
 
 
 @app.cell(hide_code=True)
-def _(charts, datapack):
+def _(charts, squares):
     charts.cell_map(
-        datapack.table("pixels"),
+        squares,
         {"Day, 10:40 am": "lst_day", "Night, 10:30 pm": "lst_night"},
         "°C",
         domains={"Day, 10:40 am": [34, 44], "Night, 10:30 pm": [22, 27]},
@@ -150,32 +216,40 @@ def _(mo):
     mo.md(r"""
     Two things to notice:
 
-    - **By day the hottest ground is at the edges**: dry fields, quarries and industrial roofs.
-      The dense old city is not the hottest place at 10:40 am.
-    - **At night it flips.** Fields cool quickly after sunset, while the packed centre holds on
-      to the day's heat. Warm nights matter for health because the body cannot recover.
+    - **By day the hottest ground is at the edges**: dry fields, quarries and factory roofs. The
+      old city centre is not the hottest place at 10:40 am.
+    - **At night it flips.** Fields cool quickly after sunset, while the packed centre holds on to
+      the day's heat. Warm nights matter for health, because the body cannot recover.
 
-    ## From pixels to wards
+    ## From squares to wards
 
-    Decisions are made ward by ward, so we need one number per ward. We give every 30 m pixel the
-    number of the ward it falls in, then average the pixels in each ward. We only use built-up
-    pixels, the places where people actually live and work, so a farm at the edge of a ward
-    doesn't count.
+    The city takes decisions ward by ward, so we want one temperature per ward: the average of the
+    30 m squares inside it.
+
+    But not every square. By day the hottest ground is empty farmland and the coolest is lakes, and
+    nobody lives in either. We want to know how hot it gets **where people live and work**, so we
+    keep only the squares that are mostly buildings and roads.
+
+    How do we know what is in a square? The ESA WorldCover map labels every 10 m of the planet as
+    trees, crops, water, buildings and so on. Nine of those small squares fit in one of our 30 m
+    squares. `built_frac` is the share of the nine that are buildings or roads, from 0 to 1. We keep
+    a square if at least 5 of its 9 are built (0.5 or more).
     """)
     return
 
 
 @app.cell
 def _(datapack, load_wards, np, ward_labels, zonal_stats):
-    wards = load_wards()
-    lst_day = datapack.layer("lst_day")  # 5-summer median, 30 m, °C
-    built_up = datapack.layer("built_frac") >= 0.5  # mostly buildings and roads
+    wards = load_wards()  # the 369 wards' boundaries
+    lst_day = datapack.layer("lst_day")  # 5-summer middle value, 30 m squares, °C
+    built_frac = datapack.layer("built_frac")  # 0 = no buildings, 1 = all buildings and roads
+    built_up = built_frac >= 0.5  # mostly buildings and roads
 
-    labels = ward_labels(wards, datapack.grid30())  # each pixel -> its ward number
-    hot_ground = np.where(built_up, lst_day, np.nan)
-    ward_heat = zonal_stats({"lst": hot_ground}, labels)
+    labels = ward_labels(wards, datapack.grid30())  # each square -> the number of its ward
+    hot_ground = np.where(built_up, lst_day, np.nan)  # leave out squares that aren't built up
+    ward_heat = zonal_stats({"lst": hot_ground}, labels)  # average per ward
     ward_heat.head()
-    return labels, lst_day, ward_heat, wards
+    return built_frac, labels, lst_day, ward_heat, wards
 
 
 @app.cell(hide_code=True)
@@ -194,10 +268,44 @@ def _(mo, ward_heat, wards):
     ground; the coolest, **{_names[_t.idxmin()]}**, {_t.min():.1f} °C. That is
     **{_t.max() - _t.min():.1f} °C** between two parts of the same city on the same mornings.
 
+    ## Does the 0.5 matter?
+
+    What if half a square is buildings and the other half trees, or bare land? Let's check by
+    redoing the average with a stricter rule (0.8: at least 7 of 9 built) and with no rule at all:
+    """)
+    return
+
+
+@app.cell
+def _(built_frac, labels, lst_day, np, pd, ward_heat, zonal_stats):
+    rules = pd.DataFrame({
+        "every square": zonal_stats({"lst": lst_day}, labels)["lst_mean"],
+        "built ≥ 0.5": ward_heat["lst_mean"],
+        "built ≥ 0.8": zonal_stats({"lst": np.where(built_frac >= 0.8, lst_day, np.nan)}, labels)["lst_mean"],
+    })
+    rules.describe().round(1)
+    return (rules,)
+
+
+@app.cell(hide_code=True)
+def _(built_frac, mo, rules):
+    def _same_top(a, b, n=10):
+        return len(set(rules[a].nlargest(n).index) & set(rules[b].nlargest(n).index))
+
+    _kept = built_frac[built_frac >= 0.5]
+    mo.md(f"""
+    - **0.5 or 0.8 hardly matters.** The squares we keep are {_kept.mean():.0%} built on average,
+      so "half trees" squares are rare. Ward averages move by
+      {(rules["built ≥ 0.8"] - rules["built ≥ 0.5"]).abs().mean():.2f} °C, and
+      {_same_top("built ≥ 0.5", "built ≥ 0.8")} of the 10 hottest wards stay the same.
+    - **Using every square changes more.** Lakes pull some wards down and farmland pushes edge wards
+      up: {_same_top("every square", "built ≥ 0.5")} of the 10 hottest stay. That is why we keep only
+      the built-up squares: it is the heat people live in.
+
     ## Try it
 
     1. Find your own ward on the map. Is it hotter or cooler than its neighbours?
-    2. Search March–May 2019 instead of 2024. How many clear passes were there?
+    2. Search March–May 2019 instead of 2024. How many clear pictures were there?
     """)
     return
 
@@ -210,28 +318,29 @@ def _(catalog):
         datetime="2019-03-01/2019-05-31",  # change the year here
         query={"platform": {"in": ["landsat-8", "landsat-9"]}, "eo:cloud_cover": {"lt": 40}},
     ).item_collection()
-    f"{len(passes_2019)} clear passes in March–May 2019"
+    f"{len(passes_2019)} clear pictures in March–May 2019"
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    3. Keep only the most built-up pixels (`0.8` instead of `0.5`). Does the list of the ten
-       hottest wards change?
+    3. Read the MODIS **day** picture instead of the night one: change `LST_Night_1km` to
+       `LST_Day_1km` in both places below. Does it look like Landsat's?
     """)
     return
 
 
 @app.cell
-def _(datapack, labels, lst_day, np, pd, ward_heat, wards, zonal_stats):
-    mostly_built = datapack.layer("built_frac") >= 0.8  # change the threshold here
-    strict_heat = zonal_stats({"lst": np.where(mostly_built, lst_day, np.nan)}, labels)
-    ward_name = wards.set_index("ward_uid")["label"]
-    pd.DataFrame({
-        "built-up ≥ 0.5": ward_name[ward_heat["lst_mean"].nlargest(10).index].values,
-        "built-up ≥ 0.8": ward_name[strict_heat["lst_mean"].nlargest(10).index].values,
-    })
+def _(catalog, charts, np):
+    import odc.stac as _stac
+
+    _items = catalog.search(collections=["modis-11A2-061"], bbox=[77.45, 12.82, 77.80, 13.155],
+                            datetime="2024-04-01/2024-04-30").item_collection()
+    _day = _stac.load([i for i in _items if i.id.startswith("MOD")][:1], bands=["LST_Day_1km"],
+                      bbox=[77.45, 12.82, 77.80, 13.155], crs="EPSG:32643", resolution=1000)
+    _dn = _day["LST_Day_1km"].values[0].astype("float32")
+    charts.image(np.where(_dn > 0, _dn * 0.02 - 273.15, np.nan))
     return
 
 

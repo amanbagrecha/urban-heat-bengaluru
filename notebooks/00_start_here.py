@@ -11,11 +11,12 @@ app = marimo.App(
 @app.cell(hide_code=True)
 def _():
     import marimo as mo
+    import pandas as pd
 
-    from wardheat import charts, datapack, indices
+    from wardheat import charts, climate, datapack, indices, warning
     from wardheat.wards import load_wards
 
-    return charts, datapack, indices, load_wards, mo
+    return charts, climate, datapack, indices, load_wards, mo, pd, warning
 
 
 @app.cell(hide_code=True)
@@ -27,8 +28,8 @@ def _(mo):
 
     <div class="lead">Bengaluru rarely crosses 40 °C, so it is easy to think heat is someone else's
     problem. But every March to May some neighbourhoods bake while others stay cool, and the people
-    living there feel the difference. Today we use free satellite data and Python to find out where,
-    for whom, and when to raise the alarm.</div>
+    living there feel the difference. Today you will use free satellite pictures and a little Python
+    to find out where it gets hot, who lives there, and when to warn them.</div>
 
     ## About me
 
@@ -49,21 +50,50 @@ def _(mo):
         <figcaption style="font-size:12px; color:#6b665c; margin-top:4px">Let's Talk Spatial #22, Takshashila Institution, May 2026</figcaption>
       </figure>
     </div>
-
-    ## Where we are going
-
-    By three o'clock you will have built this: a warning map that turns tomorrow's forecast into an
-    alert for each of the city's 369 wards. Pick how hot tomorrow will be. The same weather gets a
-    stronger alert in wards where more people live with less shade.
     """)
     return
 
 
 @app.cell(hide_code=True)
-def _(charts, datapack, indices, load_wards):
+def _(charts, climate, datapack, indices, load_wards, pd, warning):
+    # tomorrow's real forecast, and the hottest day in the record, through the system we build today
+    _era5 = datapack.table("era5_daily")
+    _normal = warning.climatology(_era5, base=(1991, 2020))
+    tomorrow = warning.heatrisk(climate.forecast(days=3, past_days=2), _normal).loc[climate.today() + pd.Timedelta(days=1)]
+    _levels = warning.heatrisk(_era5.loc["1991":], _normal)
+    hot_day = _levels[_levels.level >= 2].iloc[-1]  # the last hot day in the record
     _f = datapack.table("ward_features")
-    _g = charts.ward_shapes(load_wards(), _f.join(indices.ward_risk(_f)), keep=["label", "risk"])
-    charts.alert_map(_g, level=2)
+    _risk = indices.ward_risk(_f)["risk"]
+    _f = _f.assign(tomorrow=warning.ward_alerts(int(tomorrow.level), _risk),
+                   hot_day=warning.ward_alerts(int(hot_day.level), _risk))
+    alert_wards = charts.ward_shapes(load_wards(), _f, keep=["tomorrow", "hot_day"])
+    return alert_wards, hot_day, tomorrow
+
+
+@app.cell(hide_code=True)
+def _(alert_wards, hot_day, mo, tomorrow):
+    _warned = int((alert_wards["tomorrow"] != "No alert").sum())
+    _alerts = alert_wards["hot_day"].value_counts()
+    mo.md(f"""
+    ## Where we are going
+
+    By three o'clock you will have built a heat alert for each of the city's 369 wards, made from
+    the weather forecast. Tomorrow, {tomorrow.name:%A %d %B}, the forecast is {tomorrow.tmax:.0f} °C:
+    **{tomorrow["in words"]}** for the time of year, so {_warned or "no"} ward{"" if _warned == 1 else "s"}
+    get an alert. The last hot day in our record was {hot_day.name:%d %B %Y} ({hot_day.tmax:.1f} °C,
+    **{hot_day["in words"]}** for the time of year). The same weather is more dangerous where many
+    people live with little shade, so those {_alerts.get("Heat alert", 0) + _alerts.get("Emergency", 0)}
+    wards would have got a heat alert, and the rest a "take care".
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(alert_wards, charts, hot_day, tomorrow):
+    charts.alert_maps(alert_wards, [
+        ("tomorrow", f"Tomorrow, {tomorrow.name:%d %b}", f"forecast {tomorrow.tmax:.0f} °C: {tomorrow['in words']}"),
+        ("hot_day", f"{hot_day.name:%d %b %Y}", f"{hot_day.tmax:.1f} °C: {hot_day['in words']}"),
+    ])
     return
 
 
@@ -74,13 +104,13 @@ def _(mo):
 
     | Time | | |
     |---|---|---|
-    | 09:00 | **Welcome** | setup, and how marimo notebooks work |
-    | 09:30 | **1 · Where is it hot?** | satellite surface temperature, from pixels to wards |
+    | 09:00 | **Welcome** | get set up, and how these notebooks work |
+    | 09:30 | **1 · Where is it hot?** | how satellites see heat, by day and by night |
     | 10:30 | *break* | |
-    | 10:45 | **2 · Why are some places cooler?** | trees, water and what covers the ground |
-    | 11:30 | **3 · Who is at risk?** | heat × people × lack of shade, on one map |
+    | 10:45 | **2 · Why are some places cooler?** | trees, lakes and concrete |
+    | 11:30 | **3 · Who is at risk?** | heat, people and shade, on one map |
     | 12:30 | *lunch* | |
-    | 13:30 | **4 · When should we warn?** | local thresholds, 35 years of hot seasons, ward alerts |
+    | 13:30 | **4 · When should we warn?** | what counts as hot for Bengaluru, and tomorrow's alerts |
     | 14:45 | questions | |
     | 15:00 | close | |
 

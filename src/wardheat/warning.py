@@ -33,6 +33,8 @@ LEVELS = {
     4: ("Magenta", "Extreme: rare, long heat, impacts likely for everyone"),
 }
 
+WORDS = ["normal", "warm for the season", "hot", "very hot", "extreme"]  # the five levels, in plain words
+
 # percentile cut points (of the local, day-of-year climatology) for levels 1..4
 DEFAULT_CUTS = {"tmax": (90, 95, 98, 99.5), "tmin": (90, 95, 98, 99.5)}
 
@@ -103,6 +105,7 @@ def heatrisk(fc: pd.DataFrame, clim: pd.DataFrame, cuts: dict = DEFAULT_CUTS, du
     out["duration_bump"] = (run >= duration_days).astype(int)
     out["level"] = (out["level"] + out["duration_bump"]).clip(upper=4)
     out["name"] = out["level"].map(lambda k: LEVELS[k][0])
+    out["in words"] = out["level"].map(lambda k: WORDS[k])
     return out
 
 
@@ -128,6 +131,6 @@ ALERT_MATRIX = pd.DataFrame(
 
 
 def ward_alerts(level: int, ward_class: pd.Series, matrix: pd.DataFrame = ALERT_MATRIX) -> pd.Series:
-    """Alert level 0-3 for every ward given today's city HeatRisk level and each ward's risk class."""
+    """The alert for every ward (No alert ... Emergency), given the city's level for the day and each ward's risk."""
     cls = ward_class.replace({"Excluded": "Low"})
-    return cls.map(lambda c: int(matrix.loc[level, c]))
+    return cls.map(lambda c: ALERTS[int(matrix.loc[level, c])])

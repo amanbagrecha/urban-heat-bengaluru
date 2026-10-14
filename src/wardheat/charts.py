@@ -12,6 +12,7 @@ import warnings
 
 import altair as alt
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 
 # ---------------------------------------------------------------------------
@@ -25,7 +26,6 @@ PEOPLE = ["#f4f0e6", "#dccbe0", "#b08fbf", "#7c5795", "#4a2b63"]
 COVER = {"trees": "#4f7d4a", "water": "#3d7ea6", "mixed": "#b9b2a5", "built-up": "#8c5a4a", "farmland": "#d1a24f"}
 RISK = {"Low": "#ece4cf", "Medium": "#e9a35a", "High": "#b23a2e"}
 LEVELS = ["Green", "Yellow", "Orange", "Red", "Magenta"]
-HEAT_WORDS = ["Normal", "Warm for the season", "Hot", "Very hot", "Extreme"]  # the same levels, in words
 LEVEL_COLORS = ["#e2ddcf", "#f2cf5b", "#e8893a", "#c8442d", "#7d2a5c"]
 ALERTS = ["No alert", "Take care", "Heat alert", "Emergency"]
 ALERT_COLORS = ["#e2ddcf", "#f2cf5b", "#e8893a", "#b23a2e"]
@@ -109,6 +109,26 @@ def image(arr, unit: str = "°C", vmin: float | None = None, vmax: float | None 
     fig.patch.set_alpha(0)
     return fig
 
+
+
+def images(pictures: dict[str, np.ndarray], unit: str = "°C"):
+    """Rasters side by side as plain pictures, each with its own colour bar; keys are the titles."""
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LinearSegmentedColormap
+
+    fig, axes = plt.subplots(1, len(pictures), figsize=(4.2 * len(pictures), 4.6))
+    for ax, (title, arr) in zip(np.atleast_1d(axes), pictures.items()):
+        lo, hi = np.nanpercentile(arr, [2, 98])
+        im = ax.imshow(arr, cmap=LinearSegmentedColormap.from_list("heat", HEAT), vmin=lo, vmax=hi, interpolation="nearest")
+        ax.set_title(title, fontsize=10, color=INK, loc="left")
+        ax.set_axis_off()
+        cb = fig.colorbar(im, ax=ax, orientation="horizontal", fraction=0.04, pad=0.03, aspect=30)
+        cb.set_label(unit, color=MUTED, fontsize=9)
+        cb.outline.set_visible(False)
+        cb.ax.tick_params(labelsize=8, colors=MUTED, length=0)
+    fig.patch.set_alpha(0)
+    plt.close(fig)
+    return fig
 
 def _cells(px: pd.DataFrame, cols: dict[str, str]) -> tuple[pd.DataFrame, alt.LookupData]:
     """Compact cell table (short keys, ward ids) + a lookup table of ward names: ~3x smaller pages."""
@@ -354,26 +374,17 @@ def heat_calendar(hr: pd.DataFrame, first_year: int = 2024):
     return alt.vconcat(cal, detail, spacing=28)
 
 
-def alert_map(g: gpd.GeoDataFrame, level: int = 3):
-    """Ward alerts: pick how hot tomorrow is for the city; each ward's alert also depends on its risk."""
-    lvl = alt.param(name="lvl", value=level,
-                    bind=alt.binding_radio(options=[0, 1, 2, 3, 4], labels=HEAT_WORDS, name="Tomorrow in Bengaluru: "))
-    expr = " : ".join(f"datum.risk == '{c}' ? {row}[lvl]" for c, row in MATRIX.items()) + " : 0"
-    names = json.dumps(ALERTS)
-    alert_color = alt.Color("alert_name:N", scale=alt.Scale(domain=ALERTS, range=ALERT_COLORS), legend=alt.Legend(title=None))
-    base = alt.Chart(g).add_params(lvl).transform_calculate(alert=expr).transform_calculate(alert_name=f"{names}[datum.alert]")
-    city = (
-        base.mark_geoshape(stroke=PAPER, strokeWidth=0.4)
-        .encode(color=alert_color, tooltip=[alt.Tooltip("label:N", title="ward"), alt.Tooltip("risk:N", title="ward risk"),
-                                            alt.Tooltip("alert_name:N", title="alert")])
+def alert_maps(g: gpd.GeoDataFrame, maps: list[tuple[str, str, str]], width: int = 320, height: int = 340):
+    """Ward alert maps side by side. ``maps`` lists (column of alert names, title, subtitle)."""
+    color = alt.Color("alert:N", scale=alt.Scale(domain=ALERTS, range=ALERT_COLORS),
+                      legend=alt.Legend(title=None, orient="bottom", direction="horizontal"))
+    charts = [
+        alt.Chart(g, title=alt.Title(title, subtitle=subtitle))
+        .transform_calculate(alert=f"datum[{json.dumps(col)}]")
+        .mark_geoshape(stroke=PAPER, strokeWidth=0.4)
+        .encode(color=color, tooltip=[alt.Tooltip("label:N", title="ward"), alt.Tooltip("alert:N", title="alert")])
         .project("mercator")
-        .properties(width=390, height=410, title=alt.Title("Ward alerts", subtitle="Same weather, stronger alerts where risk is high"))
-    )
-    counts = (
-        base.mark_bar(height=14)
-        .encode(x=alt.X("count():Q", title="wards", scale=alt.Scale(domain=[0, 369])),
-                y=alt.Y("alert_name:N", sort=ALERTS, title=None, scale=alt.Scale(domain=ALERTS)),
-                color=alert_color, tooltip=["alert_name:N", "count():Q"])
-        .properties(width=170, height=110, title=alt.Title("How many wards", subtitle=" "))
-    )
-    return alt.hconcat(city, counts, spacing=20)
+        .properties(width=width, height=height)
+        for col, title, subtitle in maps
+    ]
+    return alt.hconcat(*charts, spacing=16)
