@@ -53,7 +53,8 @@ def _session() -> requests.Session:
 
 def today() -> pd.Timestamp:
     """Today's date in Bengaluru (computers in other time zones may already be on another day)."""
-    return pd.Timestamp.now(tz="Asia/Kolkata").normalize().tz_localize(None)
+    # India is UTC+5:30 all year, so no time-zone database is needed (bare Linux machines have none)
+    return (pd.Timestamp.now(tz="UTC") + pd.Timedelta(hours=5, minutes=30)).normalize().tz_localize(None)
 
 
 def era5_daily(start: str = "1991-01-01", end: str = "2025-12-31", point=CITY_POINT, model: str = "era5") -> pd.DataFrame:
