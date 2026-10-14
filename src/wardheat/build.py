@@ -113,16 +113,6 @@ def step_climate(force=False):
     _log(f"climate: {len(d)} days of ERA5")
 
 
-def step_forecast_bias(force=False):
-    from . import climate
-
-    if datapack.exists("forecast_bias") and not force:
-        return
-    b = climate.bias_table(datapack.table("era5_daily"))
-    b.to_parquet(_out("forecast_bias"))
-    _log(f"forecast_bias: {b.round(2).to_dict()}")
-
-
 def step_features(force=False):
     from . import features
 
@@ -138,7 +128,6 @@ STEPS = {
     "landcover": step_landcover,
     "canopy": step_canopy,
     "climate": step_climate,
-    "forecast_bias": step_forecast_bias,
     "features": step_features,
 }
 

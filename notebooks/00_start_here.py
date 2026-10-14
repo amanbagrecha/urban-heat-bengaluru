@@ -53,8 +53,8 @@ def _(charts, climate, datapack, indices, load_wards, pd, warning):
     # tomorrow's real forecast, and this year's hottest day, through the system we build today
     _era5 = datapack.table("era5_daily")
     _normal = warning.climatology(_era5, base=(1991, 2020))
-    tomorrow = warning.heatrisk(climate.forecast(days=3, past_days=2), _normal).loc[climate.today() + pd.Timedelta(days=1)]
-    _levels = warning.heatrisk(_era5.loc["1991":], _normal)
+    tomorrow = warning.levels(climate.forecast(days=3), normal=_normal).loc[climate.today() + pd.Timedelta(days=1)]
+    _levels = warning.levels(_era5.loc["1991":])
     _this_year = _era5.loc[str(_era5.index[-1].year), "tmax"]
     hot_day = _levels.loc[_this_year.idxmax()]  # this year's highest air temperature in the ERA5 record
     _wards = load_wards()
@@ -68,19 +68,19 @@ def _(charts, climate, datapack, indices, load_wards, pd, warning):
 @app.cell(hide_code=True)
 def _(alert_wards, hot_day, mo, tomorrow):
     _warned = int((alert_wards["tomorrow"] != "No alert").sum())
-    _hot_alerts = int(alert_wards["hot_day"].isin(["Heat alert", "Emergency"]).sum())
+    _hot = alert_wards["hot_day"].value_counts()
+    _hot_alerts = " and ".join(f"{_hot[a]} on {a.lower()}" for a in ["Emergency", "Heat alert", "Take care"] if a in _hot)
     if tomorrow.level == 0:
-        _tomorrow = (f"{tomorrow.tmax:.1f} °C, {tomorrow.tmax_anom:+.1f} °C from an average {tomorrow.name:%d %B}, and its low "
-                     f"{tomorrow.tmin:.1f} °C; both are below the alert lines ({tomorrow.tmax_alert:.1f} °C by day, "
-                     f"{tomorrow.tmin_alert:.1f} °C at night), so no ward is warned")
+        _tomorrow = (f"{tomorrow.tmax:.1f} °C, {tomorrow.tmax - tomorrow.tmax_normal:+.1f} °C from an average "
+                     f"{tomorrow.name:%d %B} but below the 33 °C alert line, so no ward is warned")
     else:
-        _tomorrow = f"{tomorrow.tmax:.1f} °C (night {tomorrow.tmin:.1f} °C): {tomorrow['in words']}, so {_warned} wards are warned"
+        _tomorrow = f"{tomorrow.tmax:.1f} °C, which is {tomorrow['in words']}, so {_warned} wards are warned"
     mo.md(f"""
     ## Where we are going
 
     By 3 pm you will turn the air temperature forecast into a heat alert for each of the 369 wards. Tomorrow's
-    forecast high (put on ERA5's scale, lesson 4) is {_tomorrow}. On this year's hottest afternoon, {hot_day.name:%d %B %Y} ({hot_day.tmax:.1f} °C air
-    temperature, ERA5), the same rule would have given {_hot_alerts} wards a heat alert.
+    forecast high is {_tomorrow}. On this year's hottest afternoon, {hot_day.name:%d %B %Y} ({hot_day.tmax:.1f} °C air
+    temperature, ERA5, {hot_day['in words']}), the same rule would have put {_hot_alerts} of the 369 wards.
     """)
     return
 

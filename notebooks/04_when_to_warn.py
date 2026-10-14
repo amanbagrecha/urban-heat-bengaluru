@@ -59,18 +59,18 @@ def _(era5, mo):
     ## 40 °C never comes
 
     In 35 years {"no day" if _n40 == 0 else f"only {_n40} days"} in Bengaluru reached 40 °C, so India's 40 °C rule would never
-    warn the city. Instead we ask how unusual a day is for its time of year:
+    warn the city. So we use one Bengaluru gauge for every day of the year: a forecast high from 33 °C is warm, 34 °C hot,
+    35 °C very hot and 36 °C extreme; 33 °C is hotter than 9 in 10 days of 1991–2020, and each level is one degree more:
     """)
     return
 
 
 @app.cell
 def _(era5, warning):
-    # for every date: how hot the days around it were in 1991-2020
-    normal = warning.climatology(era5, base=(1991, 2020))
+    normal = warning.climatology(era5, base=(1991, 2020))  # the average high for every date, 1991-2020
 
-    # a level for every day since 1991: below the alert line, warm, hot, very hot or extreme
-    levels = warning.heatrisk(era5.loc["1991":], normal)
+    # a level for every day since 1991, from its highest air temperature
+    levels = warning.levels(era5.loc["1991":], lines=(33, 34, 35, 36))
     return levels, normal
 
 
@@ -78,9 +78,7 @@ def _(era5, warning):
 def _(era5, mo):
     example = era5.loc[str(era5.index[-1].year), "tmax"].idxmax()  # our example: this year's hottest day
     mo.md(f"""
-    For each date we line up the days around it in 1991–2020 (the 30 years weather services use as "normal"): a day
-    hotter than 90 % of them is warm, 95 % hot, 98 % very hot, 99.5 % extreme. Here is {example:%d %B %Y}, this year's
-    hottest day:
+    Here is {example:%d %B %Y}, this year's hottest day, on the gauge:
     """)
     return (example,)
 
@@ -94,9 +92,7 @@ def _(charts, era5, example, normal):
 @app.cell(hide_code=True)
 def _(mo, normal):
     mo.md(f"""
-    A day must also beat {normal["tmax_ann_p90"].iloc[0]:.1f} °C, hotter than 90 % of all days of the year, so a warm
-    October day never warns; nights are judged the same way, and hot days and nights in a row add a level. Every March–May
-    since 1991:
+    Every March–May since 1991 on the same gauge:
     """)
     return
 
@@ -120,18 +116,18 @@ def _(levels, mo):
 
     ## Tomorrow's forecast
 
-    Open-Meteo's free [forecast](https://open-meteo.com/en/docs) gives the coming days' highest and lowest air temperature;
-    we shift it slightly (by under 1.5 °C) so it reads like ERA5, the record we compare it with:
+    Open-Meteo's free [forecast](https://open-meteo.com/en/docs) gives the coming days' highest air temperature, read
+    straight off the gauge:
     """)
     return
 
 
 @app.cell
 def _(climate, normal, warning):
-    forecast = climate.forecast(days=7, past_days=2)  # highest and lowest air temperature, today and the next 6 days, °C
-    week = warning.heatrisk(forecast, normal).loc[climate.today():]  # from today on
-    week[["tmax", "tmax_normal", "tmax_alert", "tmin", "in words"]].round(1).rename(columns={
-        "tmax": "high °C", "tmax_normal": "average high °C", "tmax_alert": "alert line °C", "tmin": "low °C", "in words": "level"})
+    forecast = climate.forecast(days=7)  # today and the next 6 days, as Open-Meteo gives them
+    week = warning.levels(forecast, lines=(33, 34, 35, 36), normal=normal)
+    week[["tmax", "tmax_normal", "in words"]].round(1).rename(columns={
+        "tmax": "high °C", "tmax_normal": "average high for the date °C", "in words": "level"})
     return (week,)
 
 
@@ -142,7 +138,7 @@ def _(mo):
 
     Each ward's alert combines the city's level with the ward's risk class from lesson 3:
 
-    | Tomorrow is… | below the alert line | warm | hot | very hot | extreme |
+    | Tomorrow's high is… | below 33 °C | 33 °C+ warm | 34 °C+ hot | 35 °C+ very hot | 36 °C+ extreme |
     |---|---|---|---|---|---|
     | **High-risk ward** | – | take care | heat alert | emergency | emergency |
     | **Medium-risk ward** | – | take care | take care | heat alert | emergency |
@@ -217,43 +213,23 @@ def _(mo, send):
 
     1. Click 2016 and 2019 in the calendar.
 
-    2. Add a level only after three hot days and nights in a row, instead of two:
+    2. Move the gauge one degree up:
     """)
     return
 
 
 @app.cell
 def _(era5, levels, normal, pd, warning):
-    three_in_a_row = warning.heatrisk(era5.loc["1991":], normal, duration_days=3)  # change 3 here
-    _red = lambda lv: (lv["level"] >= 3).groupby(lv.index.year).sum()
-    pd.DataFrame({"2 in a row": _red(levels), "3 in a row": _red(three_in_a_row)}).loc[2010:].rename_axis("very hot or worse days")
+    higher = warning.levels(era5.loc["1991":], lines=(34, 35, 36, 37))  # change the lines here
+    _hot = lambda lv: (lv["level"] >= 2).groupby(lv.index.year).sum()
+    pd.DataFrame({"33/34/35/36": _hot(levels), "34/35/36/37": _hot(higher)}).loc[2010:].rename_axis("hot or worse days")
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    3. Compare with 2001–2025 instead of 1991–2020:
-    """)
-    return
-
-
-@app.cell
-def _(era5, levels, pd, warning):
-    recent_normal = warning.climatology(era5, base=(2001, 2025))  # change the years here
-    recent_levels = warning.heatrisk(era5.loc["1991":], recent_normal)
-    _season = lambda lv: lv[lv.index.month.isin([3, 4, 5])]
-    pd.DataFrame({
-        "compared with 1991–2020": _season(levels).groupby(_season(levels).index.year)["level"].apply(lambda x: (x >= 2).sum()),
-        "compared with 2001–2025": _season(recent_levels).groupby(_season(recent_levels).index.year)["level"].apply(lambda x: (x >= 2).sum()),
-    }).loc[2016:].rename_axis("hot or worse days, Mar–May")
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    Next steps: tune the levels with hospital data, add humidity, add street sensors. Thank you!
+    Next steps: set the gauge from hospital records, add humidity, warm nights and hot spells, and street sensors. Thank you!
     """)
     return
 

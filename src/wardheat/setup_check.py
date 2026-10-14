@@ -18,7 +18,7 @@ ENDPOINTS = {
 def _fill_endpoints():
     from .datapack import DATA_URL
 
-    ENDPOINTS["Workshop files (GitHub)"] = DATA_URL + "forecast_bias.parquet"
+    ENDPOINTS["Workshop files (GitHub)"] = DATA_URL + "era5_daily.parquet"
 
 
 def check_packages() -> list[dict]:

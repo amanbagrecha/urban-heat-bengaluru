@@ -8,8 +8,8 @@ and when should they be warned? The answer is a heat alert for each of the city'
 
 - **Morning: where and for whom.** Landsat and MODIS surface temperature read from the cloud,
   tree canopy and land cover, and a ward-level risk score: hazard × exposure × vulnerability.
-- **Afternoon: when.** 35 years of daily air temperature, a local warning scale in the spirit of
-  the US HeatRisk, this week's forecast, and one alert per ward.
+- **Afternoon: when.** 35 years of daily air temperature, a fixed Bengaluru heat gauge (33/34/35/36 °C),
+  this week's forecast, and one alert per ward.
 
 Four short [marimo](https://marimo.io) notebooks with interactive charts (toggles, sliders,
 brushing). Open data and open-source Python only; no Earth Engine.
@@ -65,10 +65,10 @@ weak Wi-Fi, fetch them all at once with `uv run wardheat datapack download` (~40
 Each ward gets three measurements: **surface temperature** (the average of all its 30 m squares, 10:40 am
 Landsat and night MODIS, °C), **people per hectare** (Census 2011 headcount ÷ ward area) and **tree cover**. Each is rescaled from 0 (the city's
 lowest ward) to 1 (its highest; for trees, 1 = the fewest trees), and risk is the product of the three; the
-top 30 % of wards are High risk. The score compares wards with each other: it says where to act first. The warning compares a day's max and night min
-with the 1991–2020 record for that date (90/95/98/99.5th percentiles → levels 1–4, +1 for hot days
-and nights in a row). Forecasts are bias-corrected to ERA5. A ward's alert combines the city level
-with its risk class.
+top 30 % of wards are High risk. The score compares wards with each other: it says where to act first. The warning
+reads the forecast high air temperature (Open-Meteo, as given) off one fixed gauge for every day of the year: warm from
+33 °C, hot 34, very hot 35, extreme 36 (33 °C is hotter than about 9 in 10 days of 1991–2020 in ERA5). A ward's alert
+combines the city level with its risk class.
 
 Limitations: surface temperature is not air temperature, and Landsat passes at 10:40 am, before the
 daily peak. Population is the 2011 Census (the next count is in February 2027) and canopy imagery is mostly from 2018–20. Warning thresholds are not
@@ -82,7 +82,7 @@ notebooks/        the lessons (marimo) + theme.css
 src/wardheat/
   charts.py       every chart (Altair), interactivity included
   indices.py      hazard × exposure × vulnerability
-  warning.py      climatology, HeatRisk levels, ward alerts
+  warning.py      the heat gauge, ward alerts
   features.py     240 m cell table from the rasters
   stac.py landsat.py modis.py landcover.py climate.py wards.py grid.py
   site.py         notebooks -> static website (site.css)

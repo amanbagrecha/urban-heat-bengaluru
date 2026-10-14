@@ -47,7 +47,6 @@ BUILD_ONLY = {"built_frac", "crop_frac", "water_frac"}
 
 TABLES = {
     "era5_daily": "tables/era5_daily.parquet",
-    "forecast_bias": "tables/forecast_bias.parquet",
     "pixels": "tables/pixels_240m.parquet",
 }
 

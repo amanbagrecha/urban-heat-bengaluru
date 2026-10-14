@@ -68,14 +68,8 @@ def era5_daily(start: str = "1991-01-01", end: str = "2025-12-31", point=CITY_PO
     return _to_frame(r.json())
 
 
-def forecast(days: int = 7, point=CITY_POINT, past_days: int = 0, bias_correct: bool = True) -> pd.DataFrame:
-    """Daily forecast for the next ``days`` days (default model blend chosen by Open-Meteo).
-
-    Forecast models and ERA5 do not agree exactly (at Bengaluru the forecast models run
-    ~1 °C warmer in Tmax in March-May). Because warnings compare the forecast with an ERA5
-    climatology, we subtract the monthly mean difference (``forecast_bias`` table in the
-    data pack) — otherwise model bias alone would raise false alarms.
-    """
+def forecast(days: int = 7, point=CITY_POINT, past_days: int = 0) -> pd.DataFrame:
+    """Daily forecast for the next ``days`` days, as Open-Meteo gives it (its best model for the place)."""
     r = _session().get(
         "https://api.open-meteo.com/v1/forecast",
         params=dict(latitude=point[0], longitude=point[1], daily=",".join(FORECAST_VARS),
@@ -83,41 +77,4 @@ def forecast(days: int = 7, point=CITY_POINT, past_days: int = 0, bias_correct: 
         timeout=60,
     )
     r.raise_for_status()
-    fc = _to_frame(r.json())
-    if bias_correct:
-        fc = remove_bias(fc)
-    return fc
-
-
-def historical_forecast(start: str, end: str, point=CITY_POINT) -> pd.DataFrame:
-    """Archived forecast-model analyses (2022 onwards) — what the forecast models said at the time."""
-    r = requests.get(
-        "https://historical-forecast-api.open-meteo.com/v1/forecast",
-        params=dict(latitude=point[0], longitude=point[1], start_date=start, end_date=end,
-                    daily="temperature_2m_max,temperature_2m_min", timezone="Asia/Kolkata"),
-        timeout=120,
-    )
-    r.raise_for_status()
     return _to_frame(r.json())
-
-
-def bias_table(era5: pd.DataFrame, start: str = "2022-01-01", end: str = "2026-09-30") -> pd.DataFrame:
-    """Monthly mean (forecast model − ERA5) for Tmax and Tmin."""
-    h = historical_forecast(start, end)
-    e = era5.loc[start:end, ["tmax", "tmin"]]
-    diff = (h[["tmax", "tmin"]] - e).dropna()
-    out = diff.groupby(diff.index.month).mean().rename(columns={"tmax": "tmax_bias", "tmin": "tmin_bias"})
-    out.index.name = "month"
-    return out
-
-
-def remove_bias(fc: pd.DataFrame) -> pd.DataFrame:
-    """Subtract the monthly forecast-minus-ERA5 bias, a small prepared table."""
-    from . import datapack
-
-    b = datapack.table("forecast_bias")
-    fc = fc.copy()
-    m = fc.index.month
-    fc["tmax"] = fc["tmax"] - b["tmax_bias"].reindex(m).fillna(0).to_numpy()
-    fc["tmin"] = fc["tmin"] - b["tmin_bias"].reindex(m).fillna(0).to_numpy()
-    return fc

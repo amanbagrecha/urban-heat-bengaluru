@@ -384,20 +384,22 @@ def risk_explorer(g: gpd.GeoDataFrame):
 # ---------------------------------------------------------------------------
 # Lesson 4: when should we warn?
 # ---------------------------------------------------------------------------
-def heat_calendar(hr: pd.DataFrame, first_year: int = 2024):
-    """Every March-May day since 1991 coloured by HeatRisk level; click a year to see its temperatures.
+def heat_calendar(hr: pd.DataFrame, first_year: int = 2024, line: float = 33.0):
+    """Every March-May day since 1991 coloured by its level; click a year to see its highest air temperatures.
 
-    ``hr`` is the output of ``warning.heatrisk`` (index = date).
+    ``hr`` is the output of ``warning.levels`` (index = date).
     """
-    d = hr[hr.index.month.isin([3, 4, 5])].rename_axis("date").reset_index()
+    d = hr[hr.index.month.isin([3, 4, 5])].rename_axis("date").reset_index().rename(columns={"in words": "words"})
     d["year"] = d["date"].dt.year
     d["day"] = (d["date"] - pd.to_datetime(d["year"].astype(str) + "-03-01")).dt.days
     d["date_s"] = d["date"].dt.strftime("%d %b %Y")
-    d = d.rename(columns={"in words": "words"})
-    d = d[["date_s", "year", "day", "level", "words", "tmax", "tmin", "tmax_p95", "tmin_p95", "tmax_normal"]].round(1)
+    d = d[["date_s", "year", "day", "level", "words", "tmax"]].round(1)
     year = alt.selection_point(name="year_pick", fields=["year"], value=[{"year": first_year}], on="click", clear=False)
     ticks = "datum.value == 0 ? '1 Mar' : datum.value == 31 ? '1 Apr' : datum.value == 61 ? '1 May' : ''"
-    level_color = alt.Color("words:N", scale=alt.Scale(domain=WORDS, range=LEVEL_COLORS), legend=alt.Legend(title=None, orient="bottom", direction="horizontal"))
+    level_color = alt.Color("words:N", scale=alt.Scale(domain=WORDS, range=LEVEL_COLORS),
+                            legend=alt.Legend(title=None, orient="bottom", direction="horizontal"))
+    tips = [alt.Tooltip("date_s:N", title="date"), alt.Tooltip("words:N", title="level"),
+            alt.Tooltip("tmax:Q", title="highest air °C")]
     cal = (
         alt.Chart(d, title=alt.Title("36 hot seasons, one row each", subtitle="Click a year to see it below"))
         .mark_rect(stroke=PAPER, strokeWidth=0.3)
@@ -406,8 +408,7 @@ def heat_calendar(hr: pd.DataFrame, first_year: int = 2024):
             y=alt.Y("year:O", title=None, sort="descending", axis=alt.Axis(values=list(range(1991, 2027, 5)) + [2024])),
             color=level_color,
             opacity=alt.when(year).then(alt.value(1)).otherwise(alt.value(0.55)),
-            tooltip=[alt.Tooltip("date_s:N", title="date"), alt.Tooltip("words:N", title="level"),
-                     alt.Tooltip("tmax:Q", title="highest air °C"), alt.Tooltip("tmin:Q", title="lowest air °C")],
+            tooltip=tips,
         )
         .add_params(year)
         .properties(width=560, height=330)
@@ -415,21 +416,18 @@ def heat_calendar(hr: pd.DataFrame, first_year: int = 2024):
     sel = alt.Chart(d).transform_filter(year)
     x = alt.X("day:Q", title=None, scale=alt.Scale(domain=[0, 91], nice=False),
               axis=alt.Axis(values=[0, 31, 61], labelExpr=ticks, grid=False))
-    y = alt.Y("tmax:Q", title="air temperature (ERA5), °C", scale=alt.Scale(domain=[15, 40]))
+    y = alt.Y("tmax:Q", title="highest air temperature (ERA5), °C", scale=alt.Scale(domain=[25, 38]))
     tmax = sel.mark_line(color="#b03a2e", strokeWidth=1.8).encode(x=x, y=y)
-    tmin = sel.mark_line(color="#3b4a7a", strokeWidth=1.8).encode(x=x, y="tmin:Q")
-    p95x = sel.mark_line(color="#b03a2e", strokeDash=[3, 3], strokeWidth=1).encode(x=x, y="tmax_p95:Q")
-    p95n = sel.mark_line(color="#3b4a7a", strokeDash=[3, 3], strokeWidth=1).encode(x=x, y="tmin_p95:Q")
+    alert = alt.Chart(pd.DataFrame({"t": [line]})).mark_rule(color=INK, strokeDash=[4, 3], strokeWidth=1).encode(y="t:Q")
     strip = sel.mark_rect().encode(
-        x=x, x2="day2:Q", y=alt.value(326), y2=alt.value(336), color=alt.Color("words:N", scale=alt.Scale(domain=WORDS, range=LEVEL_COLORS), legend=None),
-        tooltip=[alt.Tooltip("date_s:N", title="date"), alt.Tooltip("words:N", title="level"),
-                 alt.Tooltip("tmax:Q", title="highest air °C"), alt.Tooltip("tmin:Q", title="lowest air °C")],
+        x=x, x2="day2:Q", y=alt.value(326), y2=alt.value(336),
+        color=alt.Color("words:N", scale=alt.Scale(domain=WORDS, range=LEVEL_COLORS), legend=None), tooltip=tips,
     ).transform_calculate(day2="datum.day + 1")
     label = sel.transform_aggregate(year="max(year)").mark_text(align="left", fontSize=13, fontWeight=600, dx=4, dy=4).encode(
         x=alt.value(0), y=alt.value(0), text="year:O")
-    detail = (tmax + tmin + p95x + p95n + strip + label).properties(
+    detail = (tmax + alert + strip + label).properties(
         width=560, height=340,
-        title=alt.Title("Daily highest (red) and lowest (blue) air temperature, ERA5", subtitle="Dashed: the 'hot' line for each date. Strip: the level"),
+        title=alt.Title("Each day's highest air temperature, ERA5", subtitle=f"Dashed: the {line:.0f} °C alert line. Strip: the level"),
     )
     return alt.vconcat(cal, detail, spacing=28)
 
@@ -525,30 +523,26 @@ def zonal_explainer(values: np.ndarray, labels: np.ndarray, names: pd.Series, ro
     )
 
 
-def levels_explainer(era5: pd.DataFrame, normal: pd.DataFrame, day: str, base=(1991, 2020), window: int = 15):
-    """The warning levels for one date as a coloured scale in °C, with how many past days fell in each zone."""
+def levels_explainer(era5: pd.DataFrame, normal: pd.DataFrame, day: str, lines=(33.0, 34.0, 35.0, 36.0), base=(1991, 2020)):
+    """The fixed gauge as a coloured scale in °C, with how many days of ``base`` fell in each zone, and one day pinned."""
     d = pd.Timestamp(day)
-    doy = d.dayofyear
-    cuts = [max(normal.loc[doy, f"tmax_p{p}"], normal[f"tmax_ann_p{p}"].iloc[0]) for p in ("90", "95", "98", "99_5")]
     past = era5.loc[str(base[0]):str(base[1]), "tmax"]
-    gap = np.abs(past.index.dayofyear - doy)
-    past = past[np.minimum(gap, 366 - gap) <= window]  # the days within ``window`` days of this date, every year
-    counts = np.histogram(past, bins=[-np.inf, *cuts, np.inf])[0]
-    usual = float(normal.loc[doy, "tmax_mean"])
+    counts = np.histogram(past, bins=[-np.inf, *lines, np.inf])[0]
+    usual = float(normal.loc[d.dayofyear, "tmax_mean"])
     that = float(era5.loc[day, "tmax"])
-    lo, hi = np.floor(usual - 2), np.ceil(max(that, cuts[-1]) + 1)
+    lo, hi = np.floor(min(usual, lines[0]) - 2), max(np.ceil(that), lines[-1]) + 1.5
     zones = pd.DataFrame({
-        "from": [lo, *cuts], "to": [*cuts, hi],
-        "words": ["below the alert line", "warm", "hot", "very hot", "extreme"],
-        "days": [str(c) for c in counts],
+        "from": [lo, *lines], "to": [*lines, hi],
+        "words": WORDS,
+        "days": [f"{c:,}" for c in counts],
         "ink": [INK, INK, INK, PAPER, PAPER],
     })
-    x = alt.X("from:Q", scale=alt.Scale(domain=[lo, hi], nice=False), title=f"highest air temperature of the day (ERA5), °C",
-              axis=alt.Axis(values=[round(c, 1) for c in cuts], format=".1f", grid=False))
+    x = alt.X("from:Q", scale=alt.Scale(domain=[lo, hi], nice=False), title="highest air temperature of the day, °C",
+              axis=alt.Axis(values=list(lines), format=".0f", grid=False))
     base_ = alt.Chart(zones)
     bar = base_.mark_rect(stroke=PAPER, strokeWidth=2).encode(
         x=x, x2="to:Q", y=alt.value(40), y2=alt.value(100),
-        color=alt.Color("words:N", scale=alt.Scale(domain=list(zones.words), range=LEVEL_COLORS), legend=None))
+        color=alt.Color("words:N", scale=alt.Scale(domain=WORDS, range=LEVEL_COLORS), legend=None))
     mid = base_.transform_calculate(m="(datum.from + datum.to) / 2")
     words = mid.mark_text(fontSize=11, fontWeight="bold").encode(x="m:Q", y=alt.value(62), text="words:N",
                                                                  color=alt.Color("ink:N", scale=None))
@@ -558,6 +552,5 @@ def levels_explainer(era5: pd.DataFrame, normal: pd.DataFrame, day: str, base=(1
     pin_text = alt.Chart(marks).mark_text(fontSize=11, color=INK, dy=-2, baseline="bottom").encode(
         x="t:Q", y=alt.value(28), text="label:N")
     return alt.layer(bar, words, n_days, pin, pin_text).properties(
-        width=600, height=110, title=alt.Title(f"How hot is too hot around {d:%d %B}?",
-                                               subtitle=f"The numbers: how many of the {len(past)} days within {window} days of "
-                                                        f"{d:%d %B}, {base[0]}–{base[1]}, fell in each zone"))
+        width=600, height=110, title=alt.Title("The Bengaluru heat gauge, the same every day of the year",
+                                               subtitle=f"The numbers: how many of the {len(past):,} days of {base[0]}–{base[1]} fell in each zone"))
