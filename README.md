@@ -1,4 +1,4 @@
-# Urban heat, ward by ward
+# Urban heat risk monitoring
 
 [![Fresh install](https://github.com/amanbagrecha/urban-heat-bengaluru/actions/workflows/fresh-install.yml/badge.svg)](https://github.com/amanbagrecha/urban-heat-bengaluru/actions/workflows/fresh-install.yml)
 

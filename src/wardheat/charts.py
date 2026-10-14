@@ -388,3 +388,94 @@ def alert_maps(g: gpd.GeoDataFrame, maps: list[tuple[str, str, str]], width: int
         for col, title, subtitle in maps
     ]
     return alt.hconcat(*charts, spacing=16)
+
+
+# ---------------------------------------------------------------------------
+# Explainers
+# ---------------------------------------------------------------------------
+WORLDCOVER = {10: ("trees", "#3f7d3a"), 20: ("shrubs", "#8fa957"), 30: ("grass", "#c4d48a"), 40: ("crops", "#e3c35b"),
+              50: ("buildings & roads", "#b23a2e"), 60: ("bare ground", "#cdb89a"), 80: ("water", "#4a7fb0"),
+              90: ("wetland", "#6aa3a0")}
+
+SATELLITE_SEES_HEAT = """
+<svg viewBox="0 0 660 230" width="100%" style="max-width:660px; font: 12px var(--sans, sans-serif)" role="img"
+     aria-label="Warm surfaces give off thermal infrared light; the satellite measures it">
+  <rect x="270" y="8" width="120" height="30" rx="4" fill="#1d1b16"/><rect x="236" y="17" width="34" height="12" fill="#6b665c"/>
+  <rect x="390" y="17" width="34" height="12" fill="#6b665c"/>
+  <text x="330" y="28" fill="#faf8f3" text-anchor="middle">Landsat</text>
+  <text x="440" y="27" fill="#6b665c">700 km up: a camera for heat glow</text>
+  <circle cx="40" cy="40" r="18" fill="#f2cf5b"/><text x="40" y="74" fill="#6b665c" text-anchor="middle">sun</text>
+  <path d="M60 52 L120 150" stroke="#f2cf5b" stroke-width="2" stroke-dasharray="4 4"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M110 150 q-6 -12 0 -24 q6 -12 0 -24 q-6 -12 0 -24 q6 -12 0 -24 q-6 -12 0 -24" stroke="#b23a2e" stroke-width="5"/>
+    <path d="M330 150 q-6 -12 0 -24 q6 -12 0 -24 q-6 -12 0 -24 q6 -12 0 -24" stroke="#e8893a" stroke-width="3"/>
+    <path d="M550 150 q-6 -12 0 -24 q6 -12 0 -24 q-6 -12 0 -24" stroke="#f2cf5b" stroke-width="1.5"/>
+  </g>
+  <rect x="40" y="155" width="140" height="22" fill="#3a3632"/><text x="110" y="198" text-anchor="middle" fill="#1d1b16">tar road</text>
+  <text x="110" y="214" text-anchor="middle" fill="#b23a2e" font-weight="600">≈ 50 °C, glows most</text>
+  <circle cx="300" cy="145" r="16" fill="#3f7d3a"/><circle cx="330" cy="140" r="20" fill="#3f7d3a"/><circle cx="360" cy="146" r="15" fill="#3f7d3a"/>
+  <rect x="270" y="160" width="120" height="17" fill="#5f8a4f"/><text x="330" y="198" text-anchor="middle" fill="#1d1b16">trees</text>
+  <text x="330" y="214" text-anchor="middle" fill="#e8893a" font-weight="600">≈ 35 °C</text>
+  <rect x="480" y="158" width="140" height="19" rx="9" fill="#4a7fb0"/><text x="550" y="198" text-anchor="middle" fill="#1d1b16">lake</text>
+  <text x="550" y="214" text-anchor="middle" fill="#b0902a" font-weight="600">≈ 28 °C, glows least</text>
+</svg>
+"""
+
+
+def built_rule(wc: np.ndarray, start: float = 5 / 9):
+    """A real 600 m patch of WorldCover (10 m cells) with our 30 m squares on top; a slider sets how
+    built-up a square must be to count. ``wc`` is a block of class codes whose sides are multiples of 3."""
+    h, w = wc.shape
+    rr, cc = np.mgrid[0:h, 0:w]
+    cells = pd.DataFrame({"x": cc.ravel(), "y": rr.ravel(), "code": wc.ravel().astype(int)})
+    cells["cover"] = cells.code.map(lambda k: WORLDCOVER.get(k, ("other", "#ccc"))[0])
+    cells[["x2", "y2"]] = cells[["x", "y"]] + 1
+    sq = cells.assign(sx=cells.x // 3, sy=cells.y // 3, b=(cells.code == 50)).groupby(["sx", "sy"])["b"].sum().reset_index()
+    sq = sq.assign(x=sq.sx * 3, x2=sq.sx * 3 + 3, y=sq.sy * 3, y2=sq.sy * 3 + 3, built=sq.b)
+    t = alt.param(name="t", value=round(start * 9),
+                  bind=alt.binding_range(min=0, max=9, step=1, name="keep a square if this many of its 9 cells are built: "))
+    present = [k for k in WORLDCOVER if k in set(cells.code)]
+    x = alt.X("x:Q", scale=alt.Scale(domain=[0, w], nice=False), axis=None)
+    y = alt.Y("y:Q", scale=alt.Scale(domain=[h, 0], nice=False), axis=None)
+    ground = alt.Chart(cells).mark_rect().encode(
+        x=x, x2="x2:Q", y=y, y2="y2:Q",
+        color=alt.Color("cover:N", scale=alt.Scale(domain=[WORLDCOVER[k][0] for k in present], range=[WORLDCOVER[k][1] for k in present]),
+                        legend=alt.Legend(title="WorldCover, 10 m cells", orient="bottom", columns=4, direction="horizontal")),
+        tooltip=[alt.Tooltip("cover:N", title="this 10 m cell")])
+    squares = alt.Chart(sq).add_params(t).mark_rect(stroke=PAPER, strokeWidth=1).encode(
+        x=x, x2="x2:Q", y=y, y2="y2:Q",
+        fill=alt.value(PAPER),
+        fillOpacity=alt.when("datum.built < t").then(alt.value(0.7)).otherwise(alt.value(0)),
+        tooltip=[alt.Tooltip("built:Q", title="built cells (of 9)")])
+    kept = alt.Chart(sq).transform_filter("datum.built >= t").transform_aggregate(n="count()").transform_calculate(
+        label=f"'kept: ' + datum.n + ' of {len(sq)} squares of 30 m'").mark_text(align="left", dx=2, dy=-8, fontSize=12, color=INK).encode(
+        x=alt.value(0), y=alt.value(0), text="label:N")
+    return alt.layer(ground, squares, kept).properties(
+        width=380, height=380, title=alt.Title("A real 600 m patch of east Bengaluru", subtitle="Faded 30 m squares are left out"))
+
+
+def levels_explainer(era5: pd.DataFrame, normal: pd.DataFrame, day: str = "2024-04-28"):
+    """Daily highs of the weeks around one date in 1991-2020, with the four warning levels as coloured zones."""
+    d = pd.Timestamp(day)
+    doy = d.dayofyear
+    base = era5.loc["1991":"2020"]
+    near = base[((base.index.dayofyear - doy + 183) % 366 - 183).__abs__() <= 15]
+    cuts = [max(normal.loc[doy, f"tmax_p{p}"], normal[f"tmax_ann_p{p}"].iloc[0]) for p in ("90", "95", "98", "99_5")]
+    zones = pd.DataFrame({"from": cuts, "to": cuts[1:] + [max(near.tmax.max(), era5.loc[day, "tmax"]) + 1],
+                          "level": ["Yellow", "Orange", "Red", "Magenta"], "words": ["warm", "hot", "very hot", "extreme"]})
+    near = near[near.tmax >= np.percentile(near.tmax, 1)]  # drop a few rainy outliers that stretch the axis
+    lo = float(np.floor(near.tmax.min()))
+    band = alt.Chart(zones).mark_rect(opacity=0.35).encode(
+        x=alt.X("from:Q", title="daily high, °C", scale=alt.Scale(domain=[lo, zones.to.max()]),
+                axis=alt.Axis(values=list(range(int(lo), int(zones.to.max()) + 1)), format=".0f")), x2="to:Q",
+        color=alt.Color("words:N", scale=alt.Scale(domain=["warm", "hot", "very hot", "extreme"], range=LEVEL_COLORS[1:]),
+                        legend=alt.Legend(title=None, orient="top", direction="horizontal", symbolOpacity=0.6)),
+        tooltip=["words:N", alt.Tooltip("from:Q", format=".1f", title="from °C")])
+    bars = alt.Chart(near.reset_index()).mark_bar(color="#8a8478", binSpacing=1).encode(
+        x=alt.X("tmax:Q", bin=alt.Bin(step=0.5), axis=None), y=alt.Y("count():Q", title="days, 1991–2020"))
+    mark = alt.Chart(pd.DataFrame({"t": [era5.loc[day, "tmax"]], "label": [f"{d:%d %b %Y}: {era5.loc[day, 'tmax']:.1f} °C"]}))
+    rule = mark.mark_rule(color=INK, strokeWidth=2).encode(x="t:Q")
+    text = mark.mark_text(align="right", dx=-4, dy=14, fontSize=11, color=INK, fontWeight="bold").encode(x="t:Q", y=alt.value(0), text="label:N")
+    return alt.layer(band, bars, rule, text).properties(
+        width=560, height=210, title=alt.Title(f"Every day within two weeks of {d:%d %B}, 1991–2020",
+                                               subtitle="Grey bars: how many days reached each high. Coloured zones: the warning levels"))

@@ -3,7 +3,7 @@ import marimo
 __generated_with = "0.25.1"
 app = marimo.App(
     width="compact",
-    app_title="Urban heat, ward by ward",
+    app_title="Urban heat risk monitoring",
     css_file="theme.css",
 )
 
@@ -24,21 +24,15 @@ def _(mo):
     mo.md(r"""
     <div class="kicker">Welcome · 09:00–09:30</div>
 
-    # Urban heat, ward by ward
+    # Urban heat risk monitoring
 
-    <div class="lead">Bengaluru rarely crosses 40 °C, so it is easy to think heat is someone else's
-    problem. But every March to May some neighbourhoods bake while others stay cool, and the people
-    living there feel the difference. Today you will use free satellite pictures and a little Python
-    to find out where it gets hot, who lives there, and when to warn them.</div>
+    <div class="lead">Every March–May some Bengaluru neighbourhoods bake while others stay cool. Today you
+    use free satellite pictures and a little Python to find where, who lives there, and when to warn them.</div>
 
     ## About me
 
-    I'm Aman Bagrecha, a geospatial consultant working on remote sensing, computer vision and
-    open-source tools. I write about maps, satellites and code at
-    [amanbagrecha.com](https://amanbagrecha.com), and I've spoken about open-source geospatial tools
-    at FOSS4G in Kosovo, Seoul and Hiroshima. In Bengaluru I co-run
-    [Let's Talk Spatial](https://letstalkspatial.in), a community for anyone into GIS, remote sensing
-    and maps: free meetups, talks and workshops.
+    I'm Aman Bagrecha, a geospatial consultant; I write at [amanbagrecha.com](https://amanbagrecha.com)
+    and co-run [Let's Talk Spatial](https://letstalkspatial.in), Bengaluru's free community for maps and satellites.
 
     <div style="display:flex; flex-wrap:wrap; gap:12px; margin:14px 0 6px">
       <figure style="flex:1 1 220px; margin:0">
@@ -77,13 +71,9 @@ def _(alert_wards, hot_day, mo, tomorrow):
     mo.md(f"""
     ## Where we are going
 
-    By three o'clock you will have built a heat alert for each of the city's 369 wards, made from
-    the weather forecast. Tomorrow, {tomorrow.name:%A %d %B}, the forecast is {tomorrow.tmax:.0f} °C:
-    **{tomorrow["in words"]}** for the time of year, so {_warned or "no"} ward{"" if _warned == 1 else "s"}
-    get an alert. The last hot day in our record was {hot_day.name:%d %B %Y} ({hot_day.tmax:.1f} °C,
-    **{hot_day["in words"]}** for the time of year). The same weather is more dangerous where many
-    people live with little shade, so those {_alerts.get("Heat alert", 0) + _alerts.get("Emergency", 0)}
-    wards would have got a heat alert, and the rest a "take care".
+    By 3 pm you will turn the weather forecast into a heat alert for each of the 369 wards. Tomorrow
+    ({tomorrow.name:%d %b}, {tomorrow.tmax:.0f} °C) is **{tomorrow["in words"]}**, so {_warned or "no"} wards are warned;
+    on the last hot day, {hot_day.name:%d %b %Y}, {_alerts.get("Heat alert", 0) + _alerts.get("Emergency", 0)} crowded, shadeless wards got a heat alert.
     """)
     return
 
@@ -104,83 +94,53 @@ def _(mo):
 
     | Time | | |
     |---|---|---|
-    | 09:00 | **Welcome** | get set up, and how these notebooks work |
-    | 09:30 | **1 · Where is it hot?** | how satellites see heat, by day and by night |
+    | 09:00 | **Welcome** | get set up |
+    | 09:30 | **1 · Where is it hot?** | how satellites see heat, day and night |
     | 10:30 | *break* | |
     | 10:45 | **2 · Why are some places cooler?** | trees, lakes and concrete |
-    | 11:30 | **3 · Who is at risk?** | heat, people and shade, on one map |
+    | 11:30 | **3 · Who is at risk?** | heat, people and shade on one map |
     | 12:30 | *lunch* | |
-    | 13:30 | **4 · When should we warn?** | what counts as hot for Bengaluru, and tomorrow's alerts |
-    | 14:45 | questions | |
+    | 13:30 | **4 · When should we warn?** | tomorrow's alert for every ward |
     | 15:00 | close | |
 
-    Each lesson is one notebook in the `notebooks/` folder. They run independently, so if you fall
-    behind you can always open the next one fresh.
-
-    ## How these notebooks work
-
-    A marimo notebook reruns itself: change a number in a cell and every cell that depends on it
-    updates. You only need to read the code cells that are shown; the plotting code lives in
-    `wardheat/charts.py` if you are curious.
-
-    The charts are the point. Hover them, click them, drag the sliders and boxes. Nothing you do
-    there can break anything.
+    Change a number in a cell and everything that depends on it reruns; hover, click and drag the
+    charts, nothing can break.
 
     ## The data
 
-    Everything is open and needs no account. Five summers of satellite pictures take minutes and
-    gigabytes to process, so most charts read small files we prepared from these sources, all on
-    one 30 m grid. Under each such chart, **How this file was made** shows the code that made it.
-
-    | What we want to know | Dataset | Detail |
+    | What | Source | Squares |
     |---|---|---|
-    | Ward boundaries | [GBA wards, Dec 2025](https://data.opencity.in) (OpenCity) | 369 wards |
-    | How hot surfaces get by day | [Landsat 8 & 9](https://planetarycomputer.microsoft.com/dataset/landsat-c2-l2) surface temperature | 30 m, 44 passes, Mar–May 2022–26 |
-    | How hot they stay at night | [MODIS](https://planetarycomputer.microsoft.com/dataset/modis-11A2-061) night surface temperature | 1 km |
-    | What covers the ground | [ESA WorldCover](https://esa-worldcover.org) | 10 m |
-    | Where the trees are | [Meta / WRI canopy height](https://registry.opendata.aws/dataforgood-fb-forests/) | 1.2 m |
-    | Where people live | Census 2011 ward totals spread with [WorldPop 2025](https://www.worldpop.org) | 100 m |
-    | How hot the air is, past and next week | [ERA5 and forecasts](https://open-meteo.com) via Open-Meteo | daily, ~25 km |
+    | Wards | [GBA wards, Dec 2025](https://data.opencity.in) (OpenCity) | 369 wards |
+    | Heat by day | [Landsat 8 & 9](https://planetarycomputer.microsoft.com/dataset/landsat-c2-l2) | 30 m |
+    | Heat at night | [MODIS](https://planetarycomputer.microsoft.com/dataset/modis-11A2-061) | 1 km |
+    | Ground cover | [ESA WorldCover](https://esa-worldcover.org) | 10 m |
+    | Trees | [Meta / WRI canopy height](https://registry.opendata.aws/dataforgood-fb-forests/) | 1.2 m |
+    | People | Census 2011 + [WorldPop 2025](https://www.worldpop.org) | 100 m |
+    | Air temperature | [ERA5 and forecasts](https://open-meteo.com) (Open-Meteo) | ~25 km |
 
     ## Get set up
 
-    You need [uv](https://docs.astral.sh/uv/), which installs Python and every package for you.
-
-    **Windows.** Open PowerShell (Start menu, type "PowerShell") and run these one at a time:
+    **Windows** (PowerShell):
 
     ```powershell
-    # 1. install uv, once. Then close PowerShell and open it again.
-    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-    # 2. download the workshop and install its packages (no git needed)
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"   # then reopen PowerShell
     irm https://github.com/amanbagrecha/urban-heat-bengaluru/archive/main.zip -OutFile workshop.zip
     Expand-Archive workshop.zip -DestinationPath .
     cd urban-heat-bengaluru-main
     uv sync
-
-    # 3. open the notebooks in your browser
     uv run marimo edit notebooks
     ```
 
-    **macOS and Linux.** In a terminal:
+    **macOS / Linux:**
 
     ```bash
-    curl -LsSf https://astral.sh/uv/install.sh | sh     # once; then open a new terminal
-    git clone https://github.com/amanbagrecha/urban-heat-bengaluru
-    cd urban-heat-bengaluru
+    curl -LsSf https://astral.sh/uv/install.sh | sh     # then open a new terminal
+    git clone https://github.com/amanbagrecha/urban-heat-bengaluru && cd urban-heat-bengaluru
     uv sync
     uv run marimo edit notebooks
     ```
 
-    To come back later, open a terminal in the workshop folder and run `uv run marimo edit notebooks`
-    again.
-
-    There is no data to download first. Lesson 1 reads a Landsat image straight from the cloud, and
-    the small files we prepared in advance download themselves the first time a notebook needs them.
-
-    ## Check your setup
-
-    This checks the Python packages and the internet services we use. Everything should say `True`.
+    Then check that everything says `True`:
     """)
     return
 

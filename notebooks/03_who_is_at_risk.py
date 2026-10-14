@@ -27,22 +27,12 @@ def _(mo):
 
     # Who is at risk?
 
-    <div class="lead">A scorching field with nobody in it is not a problem. Heat becomes a risk
-    where it meets people who can't get away from it.</div>
-
-    Climate scientists write this as **risk = hazard × exposure × vulnerability**. In plain words,
-    we ask three questions about each ward:
-
-    - **How hot does it get?** Its built-up ground by day, and the night (lesson 1).
-    - **How many people live there?** People per km².
-    - **How little shade do they have?** The less tree cover, the worse (lesson 2).
+    <div class="lead">Heat is a risk where it meets people who can't escape it:
+    risk = **heat × people × lack of shade**.</div>
 
     ## Where people live
 
-    The 2011 Census counted the people in every ward, but not where they live inside it. WorldPop,
-    a free population map made from satellite pictures of buildings, has that detail. We keep each
-    ward's Census count and spread it out the way WorldPop does. Let's download the result, one row
-    per ward:
+    Census 2011 ward counts, spread inside each ward with WorldPop's 2025 map. Download one row per ward:
     """)
     return
 
@@ -57,8 +47,7 @@ def _(datapack):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    `lst_built` is the daytime heat of built-up ground, `lst_night` the night, `pop_density` people
-    per km², `canopy_frac` the share under trees. Here is where people live, in 240 m squares:
+    People per hectare, in 240 m squares:
     """)
     return
 
@@ -85,14 +74,9 @@ def _(build):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    The crowded core stands out. Many of the hot patches at the city's edge are nearly empty.
-
     ## Three ingredients, one score
 
-    Heat is in °C, people in people per km² and shade in %. To combine them, we first turn each
-    into a score from 0 (the lowest wards in the city) to 1 (the highest). Then we multiply the
-    three, so a ward only scores high when all three are high: a scorching ward where nobody lives
-    stays low.
+    Each becomes a 0–1 score across wards; multiplying them means only wards high on all three score high:
     """)
     return
 
@@ -114,7 +98,7 @@ def _(f, np):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Here are the three scores on the map. Darker means more risk.
+    Darker = more risk.
     """)
     return
 
@@ -134,9 +118,7 @@ def _(mo):
     mo.md(r"""
     ## Your weights
 
-    How much should heat count compared with people or shade? There is no right answer: it is a
-    choice a city should discuss in the open. Drag the sliders (0 leaves one out) and the map and
-    the list update. The top 30 % of wards are High risk.
+    How much should each count? Drag the sliders; the top 30 % of wards are High risk.
     """)
     return
 
@@ -152,10 +134,7 @@ def _(mo):
     mo.md(r"""
     ## Try it
 
-    1. Set **People** to 0. Which wards leave the top 20, and why?
-    2. Set **Lack of shade** to 3. Which parts of the city move up?
-    3. Try a plain average `(H + E + V) / 3` instead of the geometric mean. Wards that are very hot
-       but nearly empty: where do they end up?
+    1. Set **People** to 0. 2. Set **Lack of shade** to 3. 3. A plain average instead of multiplying:
     """)
     return
 
@@ -171,10 +150,7 @@ def _(E, H, V, f, risk):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    The `moved` column is how many places a ward climbs with the plain average.
-
-    This map shows where to look first, not who is affected. Before acting on it, a city would check
-    it against hospital records and walk the streets of the top wards.
+    `moved` = places a ward climbs. A risk map shows where to look first; check it on the ground.
     """)
     return
 

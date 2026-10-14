@@ -26,13 +26,9 @@ def _(mo):
 
     # When should we warn?
 
-    <div class="lead">The maps tell us where. A warning system also needs to know when: is tomorrow
-    unusually hot for Bengaluru, at this time of year?</div>
+    <div class="lead">Is tomorrow unusually hot for Bengaluru, at this time of year?</div>
 
-    For that we need the air temperature of every day, for decades. **ERA5** is a record of the
-    weather everywhere on Earth since 1940, rebuilt by Europe's weather centre from millions of
-    past measurements. The free service Open-Meteo serves it. Let's download the daily high
-    (`tmax`) and low (`tmin`) for the city centre since 1991:
+    First, 35 years of daily highs (`tmax`) and lows (`tmin`) from ERA5, via Open-Meteo:
     """)
     return
 
@@ -57,31 +53,8 @@ def _(era5, mo):
     mo.md(f"""
     ## 40 °C never comes
 
-    The India Meteorological Department declares a heatwave on the plains when the maximum reaches
-    40 °C. Bengaluru sits 920 m up, and its hottest day since 1991 in this record was
-    **{era5['tmax'].max():.1f} °C on {_hot:%d %B %Y}**. Days at 40 °C or more: **{_n40}**. Under
-    that rule the city would never be warned.
-
-    Yet people here do get ill from heat well below 40 °C, because bodies get used to the local
-    normal. So instead of a fixed number we ask: **how unusual is this day for this place and this
-    date?**
-
-    ## A local warning scale
-
-    For every date, we look at the same weeks of the year in 1991–2020 and ask how often it was
-    this hot. This is how HeatRisk, the US weather service's scale on [heat.gov](https://www.heat.gov),
-    works:
-
-    | Level | In words | The day (or night) is hotter than… | Who is at risk |
-    |---|---|---|---|
-    | 0 Green | normal | – | almost nobody |
-    | 1 Yellow | warm for the season | 9 in 10 days at that time of year | the most heat-sensitive |
-    | 2 Orange | hot | 19 in 20 | old people, small children, anyone working outdoors |
-    | 3 Red | very hot | 49 in 50 | anyone without cooling or water |
-    | 4 Magenta | extreme | 199 in 200 | everyone |
-
-    Hot days *and* hot nights in a row raise the level by one: heat that doesn't let up is the
-    dangerous kind.
+    Bengaluru's hottest day since 1991 was **{era5['tmax'].max():.1f} °C** ({_hot:%d %B %Y}; {_n40} days ever at 40 °C), so
+    India's 40 °C rule would never warn the city. Instead we ask how unusual a day is for its time of year:
     """)
     return
 
@@ -97,6 +70,21 @@ def _(era5, warning):
 
 
 @app.cell(hide_code=True)
+def _(charts, era5, normal):
+    charts.levels_explainer(era5, normal, day="2024-04-28")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Yellow = hotter than 9 in 10 days for that date, orange 19 in 20, red 49 in 50, magenta 199 in 200
+    (the night's low counts too, and hot days and nights in a row add a level). Every day since 1991:
+    """)
+    return
+
+
+@app.cell(hide_code=True)
 def _(charts, levels):
     charts.heat_calendar(levels, first_year=2024)
     return
@@ -108,24 +96,17 @@ def _(levels, mo):
     _per_year = _s.groupby(_s.index.year)["level"].apply(lambda x: int((x >= 2).sum()))
     _dec = {f"{a}s": _per_year.loc[a:a + 9].mean() for a in (1991, 2001, 2011)}
     mo.md(f"""
-    April and early May 2024 was the longest run of Red and Magenta days in the record. Orange or
-    worse days per season averaged **{_dec['1991s']:.0f}** in the 1990s, **{_dec['2001s']:.0f}** in
-    the 2000s and **{_dec['2011s']:.0f}** in the 2010s.
-
-    Notice also how rare the colours are. A warning that fires every week gets ignored, so a good
-    scale stays green most of the time.
+    2024 had the longest run of Red and Magenta. Orange-or-worse days per season: **{_dec['1991s']:.0f}** in
+    the 1990s, **{_dec['2011s']:.0f}** in the 2010s.
 
     ## Tomorrow's forecast
-
-    The same rules work on a forecast. Let's download the next week's forecast from Open-Meteo
-    ([api.open-meteo.com](https://open-meteo.com)) and give each day a level:
     """)
     return
 
 
 @app.cell
 def _(climate, normal, warning):
-    forecast = climate.forecast(days=7, past_days=2)  # highs and lows for the next 7 days, °C
+    forecast = climate.forecast(days=7, past_days=2)  # next 7 days' highs and lows, °C (minus the model's ~1 °C warm bias)
     week = warning.heatrisk(forecast, normal).loc[climate.today():]  # from today on
     week[["tmax", "tmin", "level", "in words"]].round(1)
     return (week,)
@@ -134,22 +115,15 @@ def _(climate, normal, warning):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    (Forecast models run about 1 °C warmer than ERA5 here, so `climate.forecast` takes that off
-    before we compare.)
+    ## 369 ward alerts
 
-    ## One city level, 369 ward alerts
-
-    The forecast gives one level for the whole city. But the same weather is more dangerous in a
-    crowded, treeless ward than in a leafy one. So each ward's alert combines the city's level with
-    the ward's risk from lesson 3:
+    Each ward's alert = the city's level × the ward's risk from lesson 3:
 
     | Tomorrow is… | normal | warm | hot | very hot | extreme |
     |---|---|---|---|---|---|
-    | **High-risk ward** | no alert | take care | heat alert | emergency | emergency |
-    | **Medium-risk ward** | no alert | take care | take care | heat alert | emergency |
-    | **Low-risk ward** | no alert | no alert | take care | heat alert | emergency |
-
-    Here is tomorrow, for real, next to the last hot day in our record:
+    | **High-risk ward** | – | take care | heat alert | emergency | emergency |
+    | **Medium-risk ward** | – | take care | take care | heat alert | emergency |
+    | **Low-risk ward** | – | – | take care | heat alert | emergency |
     """)
     return
 
@@ -181,14 +155,9 @@ def _(alerts, charts, datapack, hot_day, load_wards, tomorrow):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    On a hot day, only the High-risk wards get a full heat alert. On a very hot day every ward gets
-    one, and the High-risk wards move to an emergency.
-
     ## Try it
 
-    1. Click 2016 and 2019 in the calendar. How do they compare with 2024?
-    2. By default, 2 hot days and nights in a row raise the level. With 3, how many Red days does
-       2024 keep?
+    1. Click 2016 and 2019 in the calendar. 2. Three hot days in a row instead of two:
     """)
     return
 
@@ -206,8 +175,7 @@ def _(era5, levels, normal, pd, warning):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    3. Measure "normal" on 2001–2025 instead of 1991–2020. What happens when it includes the recent
-       hot years?
+    3. "Normal" from 2001–2025 instead of 1991–2020:
     """)
     return
 
@@ -227,15 +195,7 @@ def _(era5, levels, pd, warning):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Where to go from here
-
-    - **Check against health data.** HeatRisk's thresholds were tuned on US hospital and death
-      records. Bengaluru's should be tuned on its own.
-    - **Add humidity.** Humid heat is harder on the body; Open-Meteo also serves humidity.
-    - **Local thermometers.** ERA5 is a 25 km average. A few street-level sensors would show the
-      real spread between wards.
-
-    Thank you for spending the day on this. Everything here is open, so take it to your own city.
+    Next steps: tune the levels with hospital data, add humidity, add street sensors. Thank you!
     """)
     return
 
