@@ -1,7 +1,7 @@
 """Ward heat risk = surface temperature × crowding × lack of shade (hazard × exposure × vulnerability, IPCC AR6).
 
-Each ingredient is a rank among the city's wards, from 0 to 1: surface temperature 0.88 means a hotter
-surface (satellite) than 88 % of wards (percentile ranks, as in the US CDC's Social Vulnerability Index). Multiplying them means a
+Each ingredient is a ward's place among the city's wards, from 0 to 1 (``rank(pct=True)``): 0.88 means 88 % of
+wards are at or below it. Surface temperature is the average of the 10:40 am (Landsat) and night (MODIS) values (percentile ranks, as in the US CDC's Social Vulnerability Index). Multiplying them means a
 ward only scores high when all three are high. Top 30 % of wards → High, next 30 % → Medium, the
 rest → Low.
 """
@@ -47,8 +47,8 @@ def ward_table(wards=None) -> pd.DataFrame:
 
 
 def ward_risk(f: pd.DataFrame) -> pd.DataFrame:
-    """Surface temperature, crowding and lack of shade as ranks among wards (0-1), their product and the class."""
-    H = (f["day_surface_temp"].rank(pct=True) + f["night_surface_temp"].rank(pct=True)) / 2  # hotter surface (satellite) by day and at night
+    """Surface temperature, crowding and lack of shade as places among wards (0-1), their product and the class."""
+    H = ((f["day_surface_temp"] + f["night_surface_temp"]) / 2).rank(pct=True)  # surface (satellite), morning and night
     E = f["people_per_ha"].rank(pct=True)  # more crowded
     V = (-f["trees"]).rank(pct=True)  # less tree shade
     score = H * E * V

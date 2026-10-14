@@ -88,47 +88,59 @@ def _(datapack, day_surface_temp, load_wards, night_surface_temp, np, people, tr
         "people_per_ha": people / 0.09,
     }, labels).rename(columns=lambda c: c.removesuffix("_mean"))
     f.insert(0, "ward", wards.set_index("ward_uid")["label"])
+    f["surface_temp"] = (f.day_surface_temp + f.night_surface_temp) / 2  # one surface temperature: morning and night
     f.round(2).head()
     return f, wards
 
 
 @app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ## Three ingredients, one score
+def _(charts, f, wards):
+    charts.ingredient_maps(charts.ward_shapes(wards, f.assign(
+        H=f.surface_temp.rank(pct=True), E=f.people_per_ha.rank(pct=True), V=(-f.trees).rank(pct=True)).reset_index()))
+    return
 
-    Turn each column into a rank among wards: surface temperature 0.88 means a hotter surface than 88 % of wards.
+
+@app.cell(hide_code=True)
+def _(f, mo):
+    _iqr = f.surface_temp.quantile(0.75) - f.surface_temp.quantile(0.25)
+    mo.md(f"""
+    ## From three numbers to one score
+
+    The three numbers are in different units (°C, people, % trees), so we can't add them. Instead we line the 369 wards
+    up for each number and give every ward its place in the line, from 0 to 1: 0.95 means 95 % of wards are at or below
+    it. Multiplying the three places gives a high score only to a ward near the top of all three lines at once (hot,
+    packed and treeless), and the top 30 % of scores are High risk. A place in the line says which wards to look at first,
+    not how much hotter they are: the middle half of wards are within {_iqr:.1f} °C of each other.
     """)
     return
 
 
 @app.cell
 def _(f):
-    surface_temp = (f.day_surface_temp.rank(pct=True) + f.night_surface_temp.rank(pct=True)) / 2  # day and night
+    hotter = f.surface_temp.rank(pct=True)  # 0.95 = 95 % of wards have this surface temperature or lower
     crowding = f.people_per_ha.rank(pct=True)
     no_shade = (-f.trees).rank(pct=True)  # less tree cover = higher
 
-    risk = surface_temp * crowding * no_shade  # high only if all three are high
-    return crowding, no_shade, risk, surface_temp
+    risk = hotter * crowding * no_shade  # high only if all three are high
+    return crowding, hotter, no_shade, risk
 
 
 @app.cell(hide_code=True)
-def _(charts, crowding, f, no_shade, risk, surface_temp, wards):
+def _(charts, crowding, f, hotter, no_shade, risk, wards):
     from wardheat.indices import classify
 
-    table = f.assign(H=surface_temp, E=crowding, V=no_shade, score=risk, risk=classify(risk)).reset_index()
-    g = charts.ward_shapes(wards, table, keep=["H", "E", "V", "risk", "day_surface_temp", "night_surface_temp", "people_per_ha", "trees"])
-    charts.ingredient_maps(g)
+    table = f.assign(H=hotter, E=crowding, V=no_shade, score=risk, risk=classify(risk)).reset_index()
+    g = charts.ward_shapes(wards, table, keep=["H", "E", "V", "risk", "surface_temp", "people_per_ha", "trees"])
     return (g,)
 
 
 @app.cell(hide_code=True)
-def _(crowding, f, mo, no_shade, risk, surface_temp):
+def _(crowding, f, hotter, mo, no_shade, risk):
     _w = risk.idxmax()
     mo.md(f"""
-    **{f.ward[_w]}** has a hotter surface than {surface_temp[_w]:.0%} of wards, is more crowded than {crowding[_w]:.0%} and
-    less shaded than {no_shade[_w]:.0%}: {surface_temp[_w]:.2f} × {crowding[_w]:.2f} × {no_shade[_w]:.2f} =
-    **{risk[_w]:.2f}**, the city's highest risk.
+    **{f.ward[_w]}**: surface {f.surface_temp[_w]:.1f} °C, {f.people_per_ha[_w]:,.0f} people per hectare, {f.trees[_w]:.0%}
+    tree cover. Places in line: {hotter[_w]:.2f} × {crowding[_w]:.2f} × {no_shade[_w]:.2f} = **{risk[_w]:.2f}**, the city's
+    highest score.
 
     ## Your weights
 
@@ -154,8 +166,8 @@ def _(mo):
 
 
 @app.cell
-def _(crowding, f, no_shade, risk, surface_temp):
-    plain = (surface_temp + crowding + no_shade) / 3  # a plain average instead of multiplying
+def _(crowding, f, hotter, no_shade, risk):
+    plain = (hotter + crowding + no_shade) / 3  # a plain average instead of multiplying
     compare = f[["ward"]].assign(multiplied=risk.rank(ascending=False), plain=plain.rank(ascending=False))
     compare.assign(moved=compare.multiplied - compare.plain).nlargest(10, "moved")
     return

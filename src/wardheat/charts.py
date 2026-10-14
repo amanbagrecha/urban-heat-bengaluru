@@ -306,35 +306,36 @@ def day_night_by_cover(px: pd.DataFrame):
 # Lesson 3: who is at risk?
 # ---------------------------------------------------------------------------
 def ingredient_maps(g: gpd.GeoDataFrame, width: int = 215, height: int = 240):
-    """Surface temperature, crowding and lack of shade as three small ward maps; each is a rank among wards (0-1).
+    """What was measured in each ward, in real units: surface temperature, people per hectare, tree cover.
 
-    ``g`` needs ``label``, ``H``, ``E``, ``V`` and the real values ``day_surface_temp``, ``night_surface_temp``,
-    ``people_per_ha``, ``trees`` for the tooltips.
+    ``g`` needs ``label``, ``surface_temp`` (°C), ``people_per_ha``, ``trees`` (0-1), and the places in line
+    ``H``, ``E``, ``V`` (0-1) for the tooltips.
     """
-    color = alt.Color("rank:Q", scale=alt.Scale(range=HEAT, domain=[0, 1]),
-                      legend=alt.Legend(title="share of wards it beats", format=".0%", orient="bottom",
-                                        gradientLength=300, gradientThickness=8))
     maps = []
-    for col, title, beats, real in [
-        ("H", "Surface temperature", "hotter than", [alt.Tooltip("day_surface_temp:Q", format=".1f", title="surface °C, day"),
-                                                     alt.Tooltip("night_surface_temp:Q", format=".1f", title="surface °C, night")]),
-        ("E", "Crowding", "more crowded than", [alt.Tooltip("people_per_ha:Q", format=",.0f", title="people / hectare")]),
-        ("V", "Lack of shade", "less shaded than", [alt.Tooltip("trees:Q", format=".0%", title="tree cover")]),
+    for col, title, subtitle, scale, fmt, place, place_title in [
+        ("surface_temp", "Surface temperature", "°C, average of 10:40 am and night",
+         alt.Scale(range=HEAT, domain=[31, 34], clamp=True), ".1f", "H", "wards as hot or cooler"),
+        ("people_per_ha", "People", "per hectare",
+         alt.Scale(range=PEOPLE[1:], type="log", domain=[10, 1500], clamp=True), ",.0f", "E", "wards as crowded or less"),
+        ("trees", "Tree cover", "% of the ward under trees",
+         alt.Scale(range=TREES[1:], domain=[0, 0.4], clamp=True), ".0%", "V", "wards with as many trees or more"),
     ]:
         maps.append(
-            alt.Chart(g, title=alt.Title(title, subtitle=f"{beats} … of wards"))
-            .transform_calculate(rank=f"datum.{col}")
+            alt.Chart(g, title=alt.Title(title, subtitle=subtitle))
             .mark_geoshape(stroke=PAPER, strokeWidth=0.3)
-            .encode(color=color, tooltip=[alt.Tooltip("label:N", title="ward"),
-                                          alt.Tooltip("rank:Q", format=".0%", title=f"{beats} … of wards"), *real])
+            .encode(color=alt.Color(f"{col}:Q", scale=scale,
+                                    legend=alt.Legend(title=None, format=fmt, orient="bottom", gradientLength=190,
+                                                      gradientThickness=8)),
+                    tooltip=[alt.Tooltip("label:N", title="ward"), alt.Tooltip(f"{col}:Q", format=fmt, title=title.lower()),
+                             alt.Tooltip(f"{place}:Q", format=".0%", title=place_title)])
             .project("mercator")
             .properties(width=width, height=height)
         )
-    return alt.hconcat(*maps, spacing=10)
+    return alt.hconcat(*maps, spacing=10).resolve_scale(color="independent")
 
 
 def risk_explorer(g: gpd.GeoDataFrame):
-    """Weighted geometric mean of H, E, V computed in the browser; sliders change the weights.
+    """Risk = H^wH × E^wE × V^wV computed in the browser (all weights 1 = the plain product); sliders change the weights.
 
     ``g`` needs columns ``label``, ``H``, ``E``, ``V`` (0-1) and any tooltip columns.
     """
@@ -342,7 +343,7 @@ def risk_explorer(g: gpd.GeoDataFrame):
     wE = alt.param(name="wE", value=1, bind=alt.binding_range(min=0, max=3, step=0.5, name="People "))
     wV = alt.param(name="wV", value=1, bind=alt.binding_range(min=0, max=3, step=0.5, name="Lack of shade "))
     hl = alt.selection_point(name="hl", fields=["label"], on="pointerover", clear="pointerout", empty=False)
-    score = "exp((wH * log(datum.H) + wE * log(datum.E) + wV * log(datum.V)) / max(wH + wE + wV, 0.001)) * 100"
+    score = "pow(datum.H, wH) * pow(datum.E, wE) * pow(datum.V, wV)"
     base = (
         alt.Chart(g)
         .add_params(wH, wE, wV)
@@ -351,9 +352,9 @@ def risk_explorer(g: gpd.GeoDataFrame):
         .transform_calculate(risk="datum.rank >= 0.7 ? 'High' : datum.rank >= 0.4 ? 'Medium' : 'Low'")
     )
     risk_color = alt.Color("risk:N", scale=alt.Scale(domain=list(RISK), range=list(RISK.values())), legend=alt.Legend(title=None))
-    extra = {"day_surface_temp": (".1f", "surface °C, day"), "night_surface_temp": (".1f", "surface °C, night"),
+    extra = {"surface_temp": (".1f", "surface °C, morning and night"),
              "people_per_ha": (",.0f", "people / hectare"), "trees": (".0%", "tree cover")}
-    tips = [alt.Tooltip("label:N", title="ward"), alt.Tooltip("risk:N")]
+    tips = [alt.Tooltip("label:N", title="ward"), alt.Tooltip("risk:N"), alt.Tooltip("score:Q", format=".2f", title="risk score")]
     tips += [alt.Tooltip(f"{c}:Q", format=f, title=t) for c, (f, t) in extra.items() if c in g.columns]
     city = (
         base.mark_geoshape()
@@ -362,20 +363,20 @@ def risk_explorer(g: gpd.GeoDataFrame):
                 strokeWidth=alt.when(hl).then(alt.value(1.5)).otherwise(alt.value(0.4)))
         .add_params(hl)
         .project("mercator")
-        .properties(width=390, height=410, title=alt.Title("Heat risk by ward", subtitle="Top 30 % of wards = High"))
+        .properties(width=320, height=340, title=alt.Title("Heat risk by ward", subtitle="Top 30 % of wards = High"))
     )
     top = (
         base.transform_window(n="row_number()", sort=[alt.SortField("score", order="descending")])
         .transform_filter("datum.n <= 20")
         .mark_bar(height=11)
         .encode(
-            x=alt.X("score:Q", title="risk score", scale=alt.Scale(domain=[0, 100]), axis=alt.Axis(values=[0, 50, 100])),
-            y=alt.Y("label:N", sort="-x", title=None, axis=alt.Axis(labelLimit=170, labelFontSize=10)),
+            x=alt.X("score:Q", title="risk score", scale=alt.Scale(domain=[0, 1]), axis=alt.Axis(values=[0, 0.5, 1])),
+            y=alt.Y("label:N", sort="-x", title=None, axis=alt.Axis(labelLimit=160, labelFontSize=10)),
             color=alt.when(hl).then(alt.value(INK)).otherwise(alt.value(RISK["High"])),
             tooltip=tips,
         )
         .add_params(hl)
-        .properties(width=130, height=380, title=alt.Title("20 highest", subtitle=" "))
+        .properties(width=100, height=320, title=alt.Title("20 highest", subtitle=" "))
     )
     return alt.hconcat(city, top, spacing=10)
 

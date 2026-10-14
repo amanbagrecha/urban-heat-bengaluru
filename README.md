@@ -54,19 +54,20 @@ weak Wi-Fi, fetch them all at once with `uv run wardheat datapack download` (~40
 | Lesson | What | Source | Detail | Licence |
 |---|---|---|---|---|
 | all | Wards | GBA wards, Dec 2025, with Census 2011 population ([OpenCity](https://data.opencity.in/dataset/gba-wards-delimitation-2025)) | 369 polygons | see source |
-| 1 | Day heat | Landsat 8/9 Collection 2 surface temperature ([Planetary Computer](https://planetarycomputer.microsoft.com/dataset/landsat-c2-l2)) | 30 m, 44 passes, Mar–May 2022–26 | public domain |
-| 1, 2 | Night heat | MODIS MOD11A2/MYD11A2 ([Planetary Computer](https://planetarycomputer.microsoft.com/dataset/modis-11A2-061)) | 1 km | public domain |
+| 1 | Surface temperature, day | Landsat 8/9 Collection 2 surface temperature ([Planetary Computer](https://planetarycomputer.microsoft.com/dataset/landsat-c2-l2)) | 30 m, 44 passes, Mar–May 2022–26 | public domain |
+| 1, 2 | Surface temperature, night | MODIS MOD11A2/MYD11A2 ([Planetary Computer](https://planetarycomputer.microsoft.com/dataset/modis-11A2-061)) | 1 km, 105 8-day files, Mar–May 2022–26 | public domain |
 | 1, 2 | Land cover | [ESA WorldCover 2021](https://esa-worldcover.org) | 10 m | CC BY 4.0 |
-| 2, 3 | Tree canopy | [Meta / WRI canopy height v1](https://registry.opendata.aws/dataforgood-fb-forests/), trees ≥ 3 m | 1.2 m | CC BY 4.0 |
+| 2, 3 | Tree canopy | [Meta / WRI canopy height v1](https://registry.opendata.aws/dataforgood-fb-forests/), trees ≥ 3 m | ~1 m | CC BY 4.0 |
 | 3 | People | Census 2011 ward totals spread with [WorldPop 2025](https://www.worldpop.org) | 100 m | CC BY 4.0 |
 | 4 | Air temperature | ERA5 1991–today and 7-day forecasts via [Open-Meteo](https://open-meteo.com) | daily, ~25 km | CC BY 4.0 |
 
 ## Method in brief
 
-Each ward gets three ingredients: **heat** (built-up ground by day, and the night), **crowding**
-(people per hectare) and **lack of shade** (tree cover). Each is a rank among wards from 0 to 1 (heat
-0.88 = hotter than 88 % of wards, as in the CDC's Social Vulnerability Index), and risk is their
-product; the top 30 % of wards are High risk. The warning compares a day's max and night min
+Each ward gets three measurements: **surface temperature** (the average of 10:40 am Landsat over built-up
+squares and night MODIS, °C), **people per hectare** and **tree cover**. Each becomes the ward's place among
+the 369 wards, from 0 to 1 (0.95 = 95 % of wards are at or below it, percentile ranks as in the CDC's Social
+Vulnerability Index), and risk is the product of the three places; the top 30 % of wards are High risk.
+Places are relative: the middle half of wards are within 0.8 °C of each other. The warning compares a day's max and night min
 with the 1991–2020 record for that date (90/95/98/99.5th percentiles → levels 1–4, +1 for hot days
 and nights in a row). Forecasts are bias-corrected to ERA5. A ward's alert combines the city level
 with its risk class.
