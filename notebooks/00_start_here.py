@@ -116,12 +116,12 @@ def _(mo):
 
     | What | How it is measured | When | Squares |
     |---|---|---|---|
-    | Wards | [GBA ward boundaries](https://data.opencity.in/dataset/gba-wards-delimitation-2025) (OpenCity), with Census 2011 counts | Dec 2025 | 369 wards |
+    | Wards | [GBA ward boundaries](https://data.opencity.in/dataset/gba-wards-delimitation-2025) (OpenCity) | Dec 2025 | 369 wards |
     | Surface temperature, day | [Landsat 8 & 9](https://planetarycomputer.microsoft.com/dataset/landsat-c2-l2): thermal camera, 705 km up | 10:40 am, Mar–May 2022–26 (44 pictures) | 30 m |
     | Surface temperature, night | [MODIS](https://planetarycomputer.microsoft.com/dataset/modis-11A2-061) on Terra and Aqua: thermal camera, 8-day averages | ~10 pm and ~2:30 am, Mar–May 2022–26 | 1 km |
     | Ground cover | [ESA WorldCover](https://esa-worldcover.org): Sentinel-1 radar and Sentinel-2 photos sorted into 11 classes | 2021 | 10 m |
     | Trees | [Meta & WRI tree heights](https://registry.opendata.aws/dataforgood-fb-forests/): an AI model reading Maxar satellite photos | photos mostly 2018–2020 | ~1 m |
-    | People | Census 2011 ward counts, spread by [WorldPop](https://www.worldpop.org)'s 2025 model over built-up areas | 2011 count, 2025 map | 100 m |
+    | People | Census 2011 headcount of each ward, in the GBA ward file (next census: February 2027) | 1 March 2011 | 369 wards |
     | Air temperature, past | [ERA5](https://open-meteo.com/en/docs/historical-weather-api) (ECMWF): station, balloon and satellite readings fed into a weather model | hourly, 1991 to Sep 2026 | ~25 km |
     | Air temperature, forecast | [Open-Meteo forecast](https://open-meteo.com/en/docs): mostly ECMWF's global weather model | the next 7 days | 9 km |
 

@@ -5,7 +5,7 @@ Run one step:              wardheat datapack build --step landsat
 Rebuild even if present:   wardheat datapack build --step canopy --force
 
 Each step is independent and writes into ``config.data_dir()``; steps that
-depend on wards/grids create them on the fly. Total runtime ~30-45 min on a
+depend on wards/grids create them on the fly. Total runtime ~20-30 min on a
 good connection (Landsat and canopy are the slow ones).
 """
 
@@ -49,12 +49,8 @@ def step_landsat(force=False):
     _log(f"landsat: {len(items)} scenes (Mar-May {config.YEARS[0]}-{config.YEARS[1]})")
     ds = landsat.load(items, g)
     phys = landsat.to_physical(ds)
-    scenes = landsat.scene_stats(phys)
-    scenes["platform"] = [i.properties["platform"] for i in items][: len(scenes)] if len(items) == len(scenes) else None
-    scenes.to_parquet(_out("landsat_scenes"))
     comp = landsat.median_composite(phys)
     save_geotiff(_out("lst_day"), comp["lst"].values.astype("float32"), g, source="Landsat C2 L2 ST_B10")
-    save_geotiff(_out("lst_day_nobs"), comp["n_obs"].values.astype("float32"), g)
     _log(f"landsat: done, median city LST {np.nanmedian(comp['lst'].values):.1f} °C")
 
 
@@ -81,7 +77,6 @@ def step_landcover(force=False):
         return
     g10, g30 = city_grid(10), city_grid(30)
     wc = landcover.worldcover(g10)
-    save_geotiff(_out("worldcover"), wc, g10, nodata=0)
     for k, v in landcover.fractions(wc).items():
         if k in datapack.LAYERS:
             save_geotiff(_out(k), v[: g30.height, : g30.width], g30)
@@ -108,34 +103,6 @@ def step_canopy(force=False):
     _log(f"canopy: done, city canopy {np.nanmean(f10)*100:.1f}%")
 
 
-def step_population(force=False, worldpop_path: str | None = None):
-    from . import population as P
-
-    if datapack.exists("pop_worldpop") and not force:
-        return
-    g = city_grid(30)
-    src = config.data_dir() / "source"
-    src.mkdir(exist_ok=True)
-    wp_full = worldpop_path or P.download_worldpop()
-    wp = P.clip_to_bbox(wp_full, src / "worldpop_2025_100m.tif")
-    save_geotiff(_out("pop_worldpop"), P.counts_to_grid(str(wp), g), g)
-    _log("population: done")
-
-
-def step_pop_anchor(force=False):
-    from . import population as P
-    from .wards import load_wards
-
-    if datapack.exists("pop") and not force:
-        return
-    g = city_grid(30)
-    w = load_wards()
-    labels = ward_labels(w, g)
-    pop = P.census_anchored(datapack.layer("pop_worldpop"), labels, w.set_index("ward_uid")["census2011_pop"])
-    save_geotiff(_out("pop"), pop, g, method="census-2011 ward totals x WorldPop 2025 weights")
-    _log(f"pop_anchor: {pop[labels > 0].sum():,.0f} people in GBA wards")
-
-
 def step_climate(force=False):
     from . import climate
 
@@ -159,11 +126,9 @@ def step_forecast_bias(force=False):
 def step_features(force=False):
     from . import features
 
-    df = features.build_ward_features()
-    df.to_parquet(_out("ward_features"))
     px = features.pixel_table()
     px.to_parquet(_out("pixels"), index=False)
-    _log(f"features: {df.shape} wards, {len(px)} cells of 240 m")
+    _log(f"features: {len(px)} cells of 240 m")
 
 
 STEPS = {
@@ -172,8 +137,6 @@ STEPS = {
     "modis": step_modis,
     "landcover": step_landcover,
     "canopy": step_canopy,
-    "population": step_population,
-    "pop_anchor": step_pop_anchor,
     "climate": step_climate,
     "forecast_bias": step_forecast_bias,
     "features": step_features,
@@ -196,16 +159,13 @@ def run(steps: list[str] | None = None, force: bool = False) -> None:
 # Recipes: how each prepared file the charts read is made, shown folded under the chart
 # ---------------------------------------------------------------------------
 def _recipes() -> dict:
-    from . import climate, landcover, landsat, population
+    from . import climate, landcover, landsat
 
     return {  # name -> (prepared file, the code that makes it, build steps to run, what making it reads)
         "lst": ("lst_day", [step_landsat, landsat.median_composite, step_modis], ["landsat", "modis", "features"],
                 "44 Landsat passes and 105 MODIS night composites from Planetary Computer, about 8 minutes"),
         "canopy": ("canopy_frac", [step_canopy, landcover.canopy_fraction], ["canopy", "features"],
                    "Meta and WRI's ~1 m tree-height map over the whole city, about 3 minutes"),
-        "population": ("pop", [step_population, step_pop_anchor, population.census_anchored],
-                       ["population", "pop_anchor", "features"],
-                       "WorldPop's 2025 map of all of India (about 780 MB, once), then a few seconds"),
         "era5": ("era5_daily", [climate.era5_daily, step_climate], ["climate"],
                  "35 years of daily ERA5 from Open-Meteo, a few seconds"),
     }

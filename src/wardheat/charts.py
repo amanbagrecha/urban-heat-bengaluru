@@ -449,10 +449,6 @@ def alert_maps(g: gpd.GeoDataFrame, maps: list[tuple[str, str, str]], width: int
 # ---------------------------------------------------------------------------
 # Explainers
 # ---------------------------------------------------------------------------
-WORLDCOVER = {10: ("trees", "#3f7d3a"), 20: ("shrubs", "#8fa957"), 30: ("grass", "#c4d48a"), 40: ("crops", "#e3c35b"),
-              50: ("buildings & roads", "#b23a2e"), 60: ("bare ground", "#cdb89a"), 80: ("water", "#4a7fb0"),
-              90: ("wetland", "#6aa3a0")}
-
 SATELLITE_SEES_HEAT = """
 <svg viewBox="0 0 660 250" width="100%" style="max-width:660px; font: 12px var(--sans, sans-serif)" role="img"
      aria-label="Warm surfaces give off thermal infrared light; the satellite measures it">
@@ -518,43 +514,11 @@ def zonal_explainer(values: np.ndarray, labels: np.ndarray, names: pd.Series, ro
     w = h = 280
     return alt.hconcat(
         alt.layer(left, borders).properties(width=w, height=h, title=alt.Title("Before: every 30 m square",
-                                                                                subtitle="Lines are ward borders; grey squares are not built up")),
+                                                                                subtitle="Lines are ward borders")),
         alt.layer(*layers_r).properties(width=w, height=h, title=alt.Title("After zonal_stats: one number per ward",
                                                                             subtitle="Each ward painted with the average of its squares")),
         spacing=18,
     )
-
-
-def built_rule(wc: np.ndarray, start: float = 5 / 9):
-    """A real 600 m patch of WorldCover (10 m cells) with our 30 m squares on top; a slider sets how
-    built-up a square must be to count. ``wc`` is a block of class codes whose sides are multiples of 3."""
-    h, w = wc.shape
-    rr, cc = np.mgrid[0:h, 0:w]
-    cells = pd.DataFrame({"x": cc.ravel(), "y": rr.ravel(), "code": wc.ravel().astype(int)})
-    cells["cover"] = cells.code.map(lambda k: WORLDCOVER.get(k, ("other", "#ccc"))[0])
-    cells[["x2", "y2"]] = cells[["x", "y"]] + 1
-    sq = cells.assign(sx=cells.x // 3, sy=cells.y // 3, b=(cells.code == 50)).groupby(["sx", "sy"])["b"].sum().reset_index()
-    sq = sq.assign(x=sq.sx * 3, x2=sq.sx * 3 + 3, y=sq.sy * 3, y2=sq.sy * 3 + 3, built=sq.b)
-    t = alt.param(name="t", value=round(start * 9),
-                  bind=alt.binding_range(min=0, max=9, step=1, name="keep a square if this many of its 9 cells are built: "))
-    present = [k for k in WORLDCOVER if k in set(cells.code)]
-    x = alt.X("x:Q", scale=alt.Scale(domain=[0, w], nice=False), axis=None)
-    y = alt.Y("y:Q", scale=alt.Scale(domain=[h, 0], nice=False), axis=None)
-    ground = alt.Chart(cells).mark_rect().encode(
-        x=x, x2="x2:Q", y=y, y2="y2:Q",
-        color=alt.Color("cover:N", scale=alt.Scale(domain=[WORLDCOVER[k][0] for k in present], range=[WORLDCOVER[k][1] for k in present]),
-                        legend=alt.Legend(title="WorldCover, 10 m cells", orient="bottom", columns=4, direction="horizontal")),
-        tooltip=[alt.Tooltip("cover:N", title="this 10 m cell")])
-    squares = alt.Chart(sq).add_params(t).mark_rect(stroke=PAPER, strokeWidth=1).encode(
-        x=x, x2="x2:Q", y=y, y2="y2:Q",
-        fill=alt.value(PAPER),
-        fillOpacity=alt.when("datum.built < t").then(alt.value(0.7)).otherwise(alt.value(0)),
-        tooltip=[alt.Tooltip("built:Q", title="built cells (of 9)")])
-    kept = alt.Chart(sq).transform_filter("datum.built >= t").transform_aggregate(n="count()").transform_calculate(
-        label=f"'kept: ' + datum.n + ' of {len(sq)} squares of 30 m'").mark_text(align="left", dx=2, dy=-8, fontSize=12, color=INK).encode(
-        x=alt.value(0), y=alt.value(0), text="label:N")
-    return alt.layer(ground, squares, kept).properties(
-        width=380, height=380, title=alt.Title("A real 600 m patch of east Bengaluru", subtitle="Faded 30 m squares are left out"))
 
 
 def levels_explainer(era5: pd.DataFrame, normal: pd.DataFrame, day: str = "2024-04-28"):

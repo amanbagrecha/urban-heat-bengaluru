@@ -1,7 +1,7 @@
 """Prepared files: every layer, pre-computed on the shared grids.
 
-Five summers of Landsat, 1.2 m tree canopy and a country-wide population map take minutes and
-gigabytes to process, so the lessons read small prepared files instead. Each one downloads
+Five summers of Landsat and MODIS and a 1 m tree-height map take minutes and gigabytes to
+process, so the lessons read small prepared files instead. Each one downloads
 itself the first time a notebook asks for it (``fetch``).
 
     uv run wardheat datapack status
@@ -9,12 +9,13 @@ itself the first time a notebook asks for it (``fetch``).
 
 Layout (inside ``config.data_dir()``)::
 
-    wards.parquet                 369 GBA wards (GeoParquet, EPSG:4326)
+    wards.parquet                 369 GBA wards with their Census 2011 headcount (GeoParquet, EPSG:4326)
     grid30/<layer>.tif            30 m UTM-43N COGs, all on the same grid
-    grid10/<layer>.tif            10 m UTM-43N COGs (nested 3x3 in the 30 m grid)
-    source/<layer>.tif            native-resolution clips (100 m population, 1 km MODIS)
-    tables/<name>.parquet         climate series, scene list, ward and 240 m cell tables
+    tables/<name>.parquet         climate series and the 240 m cell table
     manifest.json                 what is in the pack and where it came from
+
+The land-cover fractions (``BUILD_ONLY``) are made and used only while building the 240 m table;
+they are not part of the download.
 """
 
 from __future__ import annotations
@@ -35,27 +36,18 @@ DATA_URL = os.environ.get(  # one file per item below, plus the whole pack as a 
 DATAPACK_URL = DATA_URL + "wardheat-datapack.zip"
 
 LAYERS: dict[str, dict] = {
-    # ---- hazard
-    "lst_day": dict(path="grid30/lst_day.tif", units="°C", desc="Landsat 8/9 LST, Mar-May 2022-26 median (~10:40 IST)"),
-    "lst_day_nobs": dict(path="grid30/lst_day_nobs.tif", units="scenes", desc="Clear Landsat observations per pixel"),
-    "lst_night": dict(path="grid30/lst_night.tif", units="°C", desc="MODIS Terra+Aqua night LST median, 1 km, bilinear to 30 m"),
-    # ---- land cover / canopy
-    "worldcover": dict(path="grid10/worldcover.tif", units="class", desc="ESA WorldCover 2021 v200 classes, 10 m"),
-    "built_frac": dict(path="grid30/built_frac.tif", units="0-1", desc="Built-up fraction (WorldCover class 50) per 30 m pixel"),
-    "veg_frac": dict(path="grid30/veg_frac.tif", units="0-1", desc="Tree+shrub+grass fraction (WorldCover) per 30 m pixel"),
-    "crop_frac": dict(path="grid30/crop_frac.tif", units="0-1", desc="Cropland fraction (WorldCover class 40)"),
-    "water_frac": dict(path="grid30/water_frac.tif", units="0-1", desc="Open water fraction (WorldCover class 80)"),
-    "canopy_frac": dict(path="grid30/canopy_frac.tif", units="0-1", desc="Tree canopy >= 3 m fraction (Meta/WRI canopy height v1, 1.2 m, imagery 2018-20)"),
-    # ---- people
-    "pop": dict(path="grid30/pop.tif", units="people", desc="Census-2011 ward totals spread within each ward by WorldPop 2025"),
-    "pop_worldpop": dict(path="grid30/pop_worldpop.tif", units="people", desc="WorldPop R2025A 2025 constrained, people per 30 m pixel"),
+    "lst_day": dict(path="grid30/lst_day.tif", units="°C", desc="Landsat 8/9 surface temperature, Mar-May 2022-26 median (10:40 IST)"),
+    "lst_night": dict(path="grid30/lst_night.tif", units="°C", desc="MODIS Terra+Aqua night surface temperature median, 1 km, bilinear to 30 m"),
+    "canopy_frac": dict(path="grid30/canopy_frac.tif", units="0-1", desc="Tree canopy >= 3 m fraction (Meta/WRI canopy height v1, ~1 m, imagery mostly 2018-20)"),
+    "built_frac": dict(path="grid30/built_frac.tif", units="0-1", desc="Built-up fraction (WorldCover 2021 class 50) per 30 m pixel"),
+    "crop_frac": dict(path="grid30/crop_frac.tif", units="0-1", desc="Cropland fraction (WorldCover 2021 class 40) per 30 m pixel"),
+    "water_frac": dict(path="grid30/water_frac.tif", units="0-1", desc="Open water fraction (WorldCover 2021 class 80) per 30 m pixel"),
 }
+BUILD_ONLY = {"built_frac", "crop_frac", "water_frac"}
 
 TABLES = {
-    "landsat_scenes": "tables/landsat_scenes.parquet",
     "era5_daily": "tables/era5_daily.parquet",
     "forecast_bias": "tables/forecast_bias.parquet",
-    "ward_features": "tables/ward_features.parquet",
     "pixels": "tables/pixels_240m.parquet",
 }
 
@@ -116,7 +108,8 @@ def table(key: str) -> pd.DataFrame:
 
 
 def _files() -> list[str]:
-    return ["wards.parquet"] + [m["path"] for m in LAYERS.values()] + list(TABLES.values())
+    """The files the lessons read: what ``download`` and ``zip_pack`` cover."""
+    return ["wards.parquet"] + [m["path"] for k, m in LAYERS.items() if k not in BUILD_ONLY] + list(TABLES.values())
 
 
 def status() -> pd.DataFrame:

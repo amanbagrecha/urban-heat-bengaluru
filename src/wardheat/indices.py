@@ -1,7 +1,8 @@
 """Ward heat risk = surface temperature × crowding × lack of shade (hazard × exposure × vulnerability, IPCC AR6).
 
 Each ingredient is rescaled from 0 (the city's lowest ward) to 1 (its highest): surface temperature (the
-average of the 10:40 am Landsat and night MODIS values, °C), people per hectare, and lack of tree cover
+average of the 10:40 am Landsat and night MODIS values, °C), people per hectare (Census 2011 headcount ÷
+ward area), and lack of tree cover
 (1 = the ward with the fewest trees). Multiplying them means a ward only scores high when all three are
 high. Top 30 % of wards → High, next 30 % → Medium, the rest → Low.
 """
@@ -33,13 +34,13 @@ def ward_table(wards=None) -> pd.DataFrame:
 
     wards = wards if wards is not None else load_wards()
     labels = ward_labels(wards, datapack.grid30())
-    built_up = datapack.layer("built_frac") >= 0.5
-    f = zonal_stats({"day_surface_temp": np.where(built_up, datapack.layer("lst_day"), np.nan),
+    f = zonal_stats({"day_surface_temp": datapack.layer("lst_day"),
                      "night_surface_temp": datapack.layer("lst_night"),
-                     "trees": datapack.layer("canopy_frac"),
-                     "people_per_ha": datapack.layer("pop") / 0.09}, labels)
+                     "trees": datapack.layer("canopy_frac")}, labels)
     f = f.rename(columns=lambda c: c.removesuffix("_mean"))
-    f.insert(0, "ward", wards.set_index("ward_uid")["label"])
+    w = wards.set_index("ward_uid")
+    f.insert(0, "ward", w["label"])
+    f["people_per_ha"] = w["census2011_pop"] / (w["area_km2"] * 100)
     f["surface_temp"] = (f.day_surface_temp + f.night_surface_temp) / 2
     return f.round({"day_surface_temp": 2, "night_surface_temp": 2, "surface_temp": 2, "trees": 3, "people_per_ha": 0})
 

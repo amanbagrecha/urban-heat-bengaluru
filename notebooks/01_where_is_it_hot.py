@@ -218,31 +218,20 @@ def _(mo):
 
     ## From squares to wards
 
-    We average the surface temperature of each ward's 30 m squares, but only squares mostly covered by buildings and roads,
-    where people live. ESA's WorldCover map says what covers each 10 m cell; it was made from 2021 Sentinel-1 radar and
-    Sentinel-2 photos:
+    Each ward's surface temperature is the average of all the 30 m squares inside it:
     """)
     return
 
 
-@app.cell(hide_code=True)
-def _(charts, datapack):
-    charts.built_rule(datapack.layer("worldcover")[1245:1305, 3135:3195])  # 600 m, on the 30 m grid
-    return
-
-
 @app.cell
-def _(datapack, load_wards, np, ward_labels, zonal_stats):
+def _(datapack, load_wards, ward_labels, zonal_stats):
     wards = load_wards()  # the 369 GBA wards' boundaries (OpenCity)
     lst_day = datapack.layer("lst_day")  # surface temperature at 10:40 am, 5-summer middle value, 30 m squares, °C
-    built_frac = datapack.layer("built_frac")  # 0 = no buildings, 1 = all buildings and roads
-    built_up = built_frac >= 0.5  # mostly buildings and roads
 
     labels = ward_labels(wards, datapack.grid30())  # each square -> the number of its ward
-    hot_ground = np.where(built_up, lst_day, np.nan)  # leave out squares that aren't built up
-    ward_temp = zonal_stats({"lst": hot_ground}, labels)  # average per ward
+    ward_temp = zonal_stats({"lst": lst_day}, labels)  # average of each ward's squares
     ward_temp.head()
-    return hot_ground, labels, ward_temp, wards
+    return labels, lst_day, ward_temp, wards
 
 
 @app.cell(hide_code=True)
@@ -254,16 +243,16 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(charts, hot_ground, labels, wards):
+def _(charts, labels, lst_day, wards):
     _uid = int(wards.set_index("label").loc["Central 52 · Padarayanapura", "ward_uid"])
-    charts.zonal_explainer(hot_ground, labels, wards.set_index("ward_uid")["label"], row=681, col=342, size=60, mark=_uid)
+    charts.zonal_explainer(lst_day, labels, wards.set_index("ward_uid")["label"], row=681, col=342, size=60, mark=_uid)
     return
 
 
 @app.cell(hide_code=True)
 def _(charts, ward_temp, wards):
     _g = charts.ward_shapes(wards, ward_temp.reset_index().rename(columns={"lst_mean": "lst"}))
-    charts.ward_map(_g, {"built-up surface temperature": "lst"}, "°C")
+    charts.ward_map(_g, {"surface temperature, 10:40 am": "lst"}, "°C")
     return
 
 
@@ -272,7 +261,7 @@ def _(mo, ward_temp, wards):
     _t = ward_temp["lst_mean"]
     _names = wards.set_index("ward_uid")["label"]
     mo.md(f"""
-    **{_names[_t.idxmax()]}** has the highest built-up surface temperature ({_t.max():.1f} °C), **{_names[_t.idxmin()]}** the lowest ({_t.min():.1f} °C): {_t.max() - _t.min():.1f} °C apart.
+    **{_names[_t.idxmax()]}** has the highest surface temperature ({_t.max():.1f} °C), **{_names[_t.idxmin()]}** the lowest ({_t.min():.1f} °C): {_t.max() - _t.min():.1f} °C apart.
 
     ## Try it
 

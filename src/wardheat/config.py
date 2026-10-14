@@ -66,7 +66,7 @@ def data_dir() -> Path:
 
 
 def raw_dir() -> Path:
-    """Scratch space for raw downloads (GHSL zips, WorldPop, ...)."""
+    """Scratch space for raw downloads."""
     p = data_dir() / "_raw"
     p.mkdir(parents=True, exist_ok=True)
     return p

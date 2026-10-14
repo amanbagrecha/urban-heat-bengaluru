@@ -29,7 +29,9 @@ def _(mo):
 
     Tree cover (`canopy`) comes from Meta and WRI's tree-height map: an AI model measured the height of every ~1 m spot
     from Maxar satellite photos taken mostly in 2018–2020, and we count the share of each square under trees taller than 3 m.
-    Buildings (`built`) and water come from WorldCover (lesson 1). Each 240 m square is the average of its 8 × 8 squares of 30 m:
+    Buildings (`built`) and water come from ESA's WorldCover map, which sorts every 10 m cell into trees, crops, buildings,
+    water and so on from 2021 Sentinel-1 radar and Sentinel-2 photos. Each 240 m square is the average of its 8 × 8 squares
+    of 30 m:
     """)
     return
 

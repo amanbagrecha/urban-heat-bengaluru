@@ -11,13 +11,12 @@ app = marimo.App(
 @app.cell(hide_code=True)
 def _():
     import marimo as mo
-    import numpy as np
 
-    from wardheat import build, charts, datapack
+    from wardheat import charts, datapack
     from wardheat.grid import ward_labels, zonal_stats
     from wardheat.wards import load_wards
 
-    return build, charts, datapack, load_wards, mo, np, ward_labels, zonal_stats
+    return charts, datapack, load_wards, mo, ward_labels, zonal_stats
 
 
 @app.cell(hide_code=True)
@@ -30,38 +29,31 @@ def _(mo):
     <div class="lead">A hot surface is a risk where people are packed in without shade:
     risk = <b>surface temperature × crowding × lack of shade</b>.</div>
 
-    ## Three maps from space
+    ## Two maps from space, one headcount
 
-    Each ingredient is a map on the same 30 m squares. People come from the Census 2011 count of each ward, spread inside
-    the ward the way WorldPop's 2025 map spreads them: a computer model that places people only in areas mapped as built up
-    from satellite images.
-    Download them:
+    Surface temperature and tree cover come from satellites on the same 30 m squares (lessons 1 and 2). People come from
+    the Census 2011 headcount of each ward, carried in the GBA ward file: the latest official count, as India's next census
+    counts people in February 2027. Download them:
     """)
     return
 
 
 @app.cell
-def _(datapack):
+def _(datapack, load_wards):
     day_surface_temp = datapack.layer("lst_day")  # °C, Landsat at 10:40 am (lesson 1)
     night_surface_temp = datapack.layer("lst_night")  # °C, MODIS at night (lesson 1)
     trees = datapack.layer("canopy_frac")  # 0-1 tree cover, Meta/WRI tree heights (lesson 2)
-    people = datapack.layer("pop")  # people per square (Census 2011 + WorldPop 2025)
-    return day_surface_temp, night_surface_temp, people, trees
+    wards = load_wards()  # the 369 GBA wards, with their Census 2011 headcount
+    wards[["label", "census2011_pop", "area_km2"]].head()
+    return day_surface_temp, night_surface_temp, trees, wards
 
 
 @app.cell(hide_code=True)
-def _(charts, day_surface_temp, people, trees):
+def _(charts, day_surface_temp, trees):
     charts.images({
         "Surface temperature, 10:40 am · Landsat": (day_surface_temp, "surface temperature, °C", charts.HEAT),
         "Trees · Meta/WRI tree heights": (trees * 100, "% tree cover", charts.TREES),
-        "People · Census 2011 + WorldPop": (people / 0.09, "people per hectare", charts.PEOPLE),
     })
-    return
-
-
-@app.cell(hide_code=True)
-def _(build):
-    build.recipe("population")
     return
 
 
@@ -70,28 +62,28 @@ def _(mo):
     mo.md(r"""
     ## One row per ward
 
-    Average each map inside every ward, as in lesson 1 (a 30 m square is 0.09 hectare):
+    Average each map inside every ward with `zonal_stats` (lesson 1), and divide each ward's headcount by its area
+    (1 km² = 100 hectares):
     """)
     return
 
 
 @app.cell
-def _(datapack, day_surface_temp, load_wards, night_surface_temp, np, people, trees, ward_labels, zonal_stats):
-    wards = load_wards()
+def _(datapack, day_surface_temp, night_surface_temp, trees, ward_labels, wards, zonal_stats):
     labels = ward_labels(wards, datapack.grid30())  # each square -> its ward
-    built_up = datapack.layer("built_frac") >= 0.5  # lesson 1's rule
 
     f = zonal_stats({
-        "day_surface_temp": np.where(built_up, day_surface_temp, np.nan),
+        "day_surface_temp": day_surface_temp,
         "night_surface_temp": night_surface_temp,
         "trees": trees,
-        "people_per_ha": people / 0.09,
     }, labels).rename(columns=lambda c: c.removesuffix("_mean"))
-    f.insert(0, "ward", wards.set_index("ward_uid")["label"])
+    w = wards.set_index("ward_uid")
+    f.insert(0, "ward", w["label"])
+    f["people_per_ha"] = w["census2011_pop"] / (w["area_km2"] * 100)  # Census 2011 people ÷ hectares
     f["surface_temp"] = (f.day_surface_temp + f.night_surface_temp) / 2  # one surface temperature: morning and night
     f = f.round({"day_surface_temp": 2, "night_surface_temp": 2, "surface_temp": 2, "trees": 3, "people_per_ha": 0})
     f.head()
-    return f, wards
+    return (f,)
 
 
 @app.cell(hide_code=True)

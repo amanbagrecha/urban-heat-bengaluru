@@ -53,18 +53,17 @@ weak Wi-Fi, fetch them all at once with `uv run wardheat datapack download` (~40
 
 | Lesson | What | Source | Detail | Licence |
 |---|---|---|---|---|
-| all | Wards | GBA wards, Dec 2025, with Census 2011 population ([OpenCity](https://data.opencity.in/dataset/gba-wards-delimitation-2025)) | 369 polygons | see source |
+| all | Wards and people | GBA wards, Dec 2025, with each ward's Census 2011 headcount ([OpenCity](https://data.opencity.in/dataset/gba-wards-delimitation-2025)) | 369 polygons | see source |
 | 1 | Surface temperature, day | Landsat 8/9 Collection 2 surface temperature ([Planetary Computer](https://planetarycomputer.microsoft.com/dataset/landsat-c2-l2)) | 30 m, 44 passes, Mar–May 2022–26 | public domain |
 | 1, 2 | Surface temperature, night | MODIS MOD11A2/MYD11A2 ([Planetary Computer](https://planetarycomputer.microsoft.com/dataset/modis-11A2-061)) | 1 km, 105 8-day files, Mar–May 2022–26 | public domain |
-| 1, 2 | Land cover | [ESA WorldCover 2021](https://esa-worldcover.org) | 10 m | CC BY 4.0 |
+| 2 | Land cover | [ESA WorldCover 2021](https://esa-worldcover.org) | 10 m | CC BY 4.0 |
 | 2, 3 | Tree canopy | [Meta / WRI canopy height v1](https://registry.opendata.aws/dataforgood-fb-forests/), trees ≥ 3 m | ~1 m | CC BY 4.0 |
-| 3 | People | Census 2011 ward totals spread with [WorldPop 2025](https://www.worldpop.org) | 100 m | CC BY 4.0 |
 | 4 | Air temperature | ERA5 1991–today and 7-day forecasts via [Open-Meteo](https://open-meteo.com) | daily, ~25 km | CC BY 4.0 |
 
 ## Method in brief
 
-Each ward gets three measurements: **surface temperature** (the average of 10:40 am Landsat over built-up
-squares and night MODIS, °C), **people per hectare** and **tree cover**. Each is rescaled from 0 (the city's
+Each ward gets three measurements: **surface temperature** (the average of all its 30 m squares, 10:40 am
+Landsat and night MODIS, °C), **people per hectare** (Census 2011 headcount ÷ ward area) and **tree cover**. Each is rescaled from 0 (the city's
 lowest ward) to 1 (its highest; for trees, 1 = the fewest trees), and risk is the product of the three; the
 top 30 % of wards are High risk. The score compares wards with each other: it says where to act first. The warning compares a day's max and night min
 with the 1991–2020 record for that date (90/95/98/99.5th percentiles → levels 1–4, +1 for hot days
@@ -72,7 +71,7 @@ and nights in a row). Forecasts are bias-corrected to ERA5. A ward's alert combi
 with its risk class.
 
 Limitations: surface temperature is not air temperature, and Landsat passes at 10:40 am, before the
-daily peak. Population is modelled and canopy imagery is from 2018–20. Warning thresholds are not
+daily peak. Population is the 2011 Census (the next count is in February 2027) and canopy imagery is mostly from 2018–20. Warning thresholds are not
 yet calibrated against Bengaluru health records. A risk map shows where to look first; check it on
 the ground before acting on it.
 
@@ -84,8 +83,8 @@ src/wardheat/
   charts.py       every chart (Altair), interactivity included
   indices.py      hazard × exposure × vulnerability
   warning.py      climatology, HeatRisk levels, ward alerts
-  features.py     ward table and 240 m cell table from the rasters
-  stac.py landsat.py modis.py landcover.py population.py climate.py wards.py grid.py
+  features.py     240 m cell table from the rasters
+  stac.py landsat.py modis.py landcover.py climate.py wards.py grid.py
   site.py         notebooks -> static website (site.css)
   datapack.py build.py cli.py config.py setup_check.py
 tests/run_notebook.py

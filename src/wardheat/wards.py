@@ -1,8 +1,8 @@
 """Ward boundaries: the Greater Bengaluru Authority's 369 wards (final delimitation, Nov/Dec 2025).
 
 Source: OpenCity "GBA Wards Delimitation 2025" (public domain, source GBA).
-The KML also carries Census 2011 population per ward, which we keep as an
-independent check on the modelled (WorldPop) population.
+The KML also carries each ward's Census 2011 headcount (1 March 2011), the latest official count;
+lesson 3 uses it for people per hectare.
 """
 
 from __future__ import annotations
