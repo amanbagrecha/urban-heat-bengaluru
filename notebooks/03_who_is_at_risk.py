@@ -44,7 +44,7 @@ def _(datapack, load_wards):
     night_surface_temp = datapack.layer("lst_night")  # °C, MODIS at night (lesson 1)
     trees = datapack.layer("canopy_frac")  # 0-1 tree cover, Meta/WRI tree heights (lesson 2)
     wards = load_wards()  # the 369 GBA wards, with their Census 2011 headcount
-    wards[["label", "census2011_pop", "area_km2"]].head()
+    wards[["label", "census2011_pop", "area_km2"]].head()  # area in km²
     return day_surface_temp, night_surface_temp, trees, wards
 
 
@@ -101,8 +101,9 @@ def _(f, mo):
     The three numbers are in different units, so we rescale each from 0 for the city's lowest ward to 1 for its highest:
     surface temperature from {_t.min():.2f} °C (0) to {_t.max():.2f} °C (1), people from {_p.min():,.0f} (0) to
     {_p.max():,.0f} per hectare (1), and lack of shade from {_c.max():.1f} % tree cover (0) to {_c.min():.1f} % (1).
-    Multiplying the three gives a high score only to a ward that is hot, packed and treeless at once, and the 30 % of
-    wards with the highest scores are High risk; the score compares wards with each other, so it says where to act first.
+    Multiplying the three gives a high score only to a ward that is hot, packed and treeless at once: the top 30 % of
+    scores are High risk, the next 30 % Medium and the rest Low. The score compares wards with each other, so it says
+    where to act first.
     """)
     return
 
@@ -133,13 +134,15 @@ def _(charts, crowded, f, hot, no_shade, risk, wards):
 def _(crowded, f, hot, mo, no_shade, risk):
     _w = risk.idxmax()
     mo.md(f"""
-    **{f.ward[_w]}**: {f.surface_temp[_w]:.2f} °C → {hot[_w]:.3f}, {f.people_per_ha[_w]:,.0f} people per hectare →
-    {crowded[_w]:.3f}, {f.trees[_w]:.1%} tree cover → {no_shade[_w]:.3f}; {hot[_w]:.3f} × {crowded[_w]:.3f} ×
-    {no_shade[_w]:.3f} = **{risk[_w]:.3f}**, the city's highest score.
+    **{f.ward[_w]}**: {f.surface_temp[_w]:.2f} °C surface temperature → ({f.surface_temp[_w]:.2f} − {f.surface_temp.min():.2f}) ÷
+    ({f.surface_temp.max():.2f} − {f.surface_temp.min():.2f}) = {hot[_w]:.3f}; {f.people_per_ha[_w]:,.0f} people per hectare →
+    {crowded[_w]:.3f}; {f.trees[_w]:.1%} tree cover → {no_shade[_w]:.3f}. Score: {hot[_w]:.3f} × {crowded[_w]:.3f} ×
+    {no_shade[_w]:.3f} = **{risk[_w]:.3f}**, the city's highest.
 
     ## Your weights
 
-    How much should each count? Drag the sliders; the top 30 % of wards are High risk.
+    How much should each count? Each slider is a power: 1 counts it once, 2 counts it twice, 0 leaves it out. The top
+    30 % of wards are High risk.
     """)
     return
 
@@ -155,7 +158,11 @@ def _(mo):
     mo.md(r"""
     ## Try it
 
-    1. Set **People** to 0. 2. Set **Lack of shade** to 3. 3. A plain average instead of multiplying:
+    1. Set **People** to 0.
+
+    2. Set **Lack of shade** to 3.
+
+    3. A plain average instead of multiplying:
     """)
     return
 
@@ -171,7 +178,7 @@ def _(crowded, f, hot, no_shade, risk):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    `moved` = places a ward climbs. A risk map shows where to look first; check it on the ground.
+    `moved` = how many places a ward climbs when the three are averaged instead of multiplied. A risk map shows where to look first; check it on the ground.
 
     <div class="next">Next → <b>4 · When should we warn?</b></div>
     """)

@@ -70,15 +70,16 @@ def _(alert_wards, hot_day, mo, tomorrow):
     _warned = int((alert_wards["tomorrow"] != "No alert").sum())
     _hot_alerts = int(alert_wards["hot_day"].isin(["Heat alert", "Emergency"]).sum())
     if tomorrow.level == 0:
-        _tomorrow = (f"{tomorrow.tmax:.1f} °C, {tomorrow.tmax_anom:+.1f} °C from a usual {tomorrow.name:%d %B} but below "
-                     f"the {tomorrow.tmax_alert:.1f} °C alert line, so no ward is warned")
+        _tomorrow = (f"{tomorrow.tmax:.1f} °C, {tomorrow.tmax_anom:+.1f} °C from an average {tomorrow.name:%d %B}, and its low "
+                     f"{tomorrow.tmin:.1f} °C; both are below the alert lines ({tomorrow.tmax_alert:.1f} °C by day, "
+                     f"{tomorrow.tmin_alert:.1f} °C at night), so no ward is warned")
     else:
         _tomorrow = f"{tomorrow.tmax:.1f} °C (night {tomorrow.tmin:.1f} °C): {tomorrow['in words']}, so {_warned} wards are warned"
     mo.md(f"""
     ## Where we are going
 
     By 3 pm you will turn the air temperature forecast into a heat alert for each of the 369 wards. Tomorrow's
-    forecast high is {_tomorrow}. On this year's hottest afternoon, {hot_day.name:%d %B %Y} ({hot_day.tmax:.1f} °C air
+    forecast high (put on ERA5's scale, lesson 4) is {_tomorrow}. On this year's hottest afternoon, {hot_day.name:%d %B %Y} ({hot_day.tmax:.1f} °C air
     temperature, ERA5), the same rule would have given {_hot_alerts} wards a heat alert.
     """)
     return
@@ -118,12 +119,12 @@ def _(mo):
     |---|---|---|---|
     | Wards | [GBA ward boundaries](https://data.opencity.in/dataset/gba-wards-delimitation-2025) (OpenCity) | Dec 2025 | 369 wards |
     | Surface temperature, day | [Landsat 8 & 9](https://planetarycomputer.microsoft.com/dataset/landsat-c2-l2): thermal camera, 705 km up | 10:40 am, Mar–May 2022–26 (44 pictures) | 30 m |
-    | Surface temperature, night | [MODIS](https://planetarycomputer.microsoft.com/dataset/modis-11A2-061) on Terra and Aqua: thermal camera, 8-day averages | ~10 pm and ~2:30 am, Mar–May 2022–26 | 1 km |
+    | Surface temperature, night | [MODIS](https://planetarycomputer.microsoft.com/dataset/modis-11A2-061) on Terra and Aqua: thermal camera, 8-day averages | ~10 pm and ~2:30 am, Mar–May 2022–26 (105 files) | 1 km |
     | Ground cover | [ESA WorldCover](https://esa-worldcover.org): Sentinel-1 radar and Sentinel-2 photos sorted into 11 classes | 2021 | 10 m |
     | Trees | [Meta & WRI tree heights](https://registry.opendata.aws/dataforgood-fb-forests/): an AI model reading Maxar satellite photos | photos mostly 2018–2020 | ~1 m |
     | People | Census 2011 headcount of each ward, in the GBA ward file (next census: February 2027) | 1 March 2011 | 369 wards |
-    | Air temperature, past | [ERA5](https://open-meteo.com/en/docs/historical-weather-api) (ECMWF): station, balloon and satellite readings fed into a weather model | hourly, 1991 to Sep 2026 | ~25 km |
-    | Air temperature, forecast | [Open-Meteo forecast](https://open-meteo.com/en/docs): mostly ECMWF's global weather model | the next 7 days | 9 km |
+    | Air temperature, past | [ERA5](https://open-meteo.com/en/docs/historical-weather-api) (ECMWF): station, balloon and satellite readings fed into a weather model | each day's highest and lowest, 1991 to Sep 2026 | ~25 km |
+    | Air temperature, forecast | [Open-Meteo forecast](https://open-meteo.com/en/docs): ECMWF's global weather model | the next 7 days | 9 km |
 
     ## Get set up
 

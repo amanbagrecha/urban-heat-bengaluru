@@ -22,16 +22,16 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    <div class="kicker">Lesson 4 · 13:30–14:45</div>
+    <div class="kicker">Lesson 4 · 13:30–15:00</div>
 
     # When should we warn?
 
     <div class="lead">Satellites can't see tomorrow, so the alert uses <b>air temperature</b> (2 m above the ground):
-    is tomorrow's forecast unusually high for Bengaluru at this time of year?</div>
+    is tomorrow's forecast unusually high for this time of year, and hot for Bengaluru at all?</div>
 
     First, 35 years of each day's highest (`tmax`) and lowest (`tmin`) air temperature from ERA5: ECMWF, Europe's weather
     centre, rebuilds past weather hour by hour on ~25 km squares by feeding station, balloon and satellite readings into a
-    weather model. A 25 km square mixes town and countryside, so it reads about 1 °C below the city's weather station on
+    weather model. A 25 km square mixes town and countryside, so it reads about 1.5 °C below the city's weather station on
     March–May afternoons:
     """)
     return
@@ -105,22 +105,22 @@ def _(levels, mo):
     _run = _red.groupby((~_red).cumsum()).cumsum()
     mo.md(f"""
     {_run.idxmax():%Y} had the longest run of Red or Magenta ({_run.max()} days in a row). Orange-or-worse days per season:
-    **{_dec['1991s']:.1f}** in the 1990s, **{_dec['2011s']:.1f}** in the 2010s.
+    **{_dec['1991s']:.1f}** on average in 1991–2000, **{_dec['2011s']:.1f}** in 2011–2020.
 
     ## Tomorrow's forecast
 
     Open-Meteo gives each coming day's highest and lowest air temperature from the sharpest weather model for the place,
-    for Bengaluru mostly ECMWF's 9 km model; we subtract its average difference from ERA5 for that month, so the forecast
-    is on the same scale as the 35 years:
+    for Bengaluru ECMWF's 9 km model; we subtract the forecast models' average difference from ERA5 for that month
+    (2022–2026), so the forecast is on the same scale as the 35 years:
     """)
     return
 
 
 @app.cell
 def _(climate, normal, warning):
-    forecast = climate.forecast(days=7, past_days=2)  # next 7 days' highest and lowest air temperature, °C
+    forecast = climate.forecast(days=7, past_days=2)  # highest and lowest air temperature, today and the next 6 days, °C
     week = warning.heatrisk(forecast, normal).loc[climate.today():]  # from today on
-    week[["tmax", "tmax_normal", "tmax_alert", "tmin", "level", "in words"]].round(1)  # normal = a usual day for the date
+    week[["tmax", "tmax_normal", "tmax_alert", "tmin", "level", "in words"]].round(1)  # normal = the average for the date
     return (week,)
 
 
@@ -129,7 +129,7 @@ def _(mo):
     mo.md(r"""
     ## 369 ward alerts
 
-    Each ward's alert = the city's level × the ward's risk from lesson 3:
+    Each ward's alert combines the city's level with the ward's risk class from lesson 3:
 
     | Tomorrow is… | below the alert line | warm | hot | very hot | extreme |
     |---|---|---|---|---|---|
@@ -178,10 +178,8 @@ def _(mo):
 @app.cell
 def _(era5, levels, normal, pd, warning):
     three_in_a_row = warning.heatrisk(era5.loc["1991":], normal, duration_days=3)  # change 3 here
-    pd.DataFrame({
-        "2 in a row": (levels.loc["2024", "level"] >= 3).sum(),
-        "3 in a row": (three_in_a_row.loc["2024", "level"] >= 3).sum(),
-    }, index=["Red or worse days in 2024"])
+    _red = lambda lv: (lv["level"] >= 3).groupby(lv.index.year).sum()
+    pd.DataFrame({"2 in a row": _red(levels), "3 in a row": _red(three_in_a_row)}).loc[2010:].rename_axis("Red or worse days")
     return
 
 

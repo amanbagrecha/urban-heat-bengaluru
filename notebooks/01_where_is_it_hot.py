@@ -119,7 +119,7 @@ def _(charts, lst):
 def _(mo, scene):
     mo.md(f"""
     Surface temperature at 10:40 am on {scene.datetime:%d %B %Y} ({scene.properties["platform"].title()}, the clearest picture
-    of March–May 2024): pale is cooler (lakes, parks), dark is hotter (bare ground, roofs).
+    of March–May 2024): pale is cooler (lakes, parks and the leafy centre), dark is hotter (bare farmland at the edges).
 
     ## At night: another satellite
 
@@ -157,10 +157,10 @@ def _(catalog, np, scene):
 @app.cell(hide_code=True)
 def _(charts, lst, lst_night, pd, scene, seen_at, terra):
     _start, _end = (pd.Timestamp(terra.properties[k]) for k in ("start_datetime", "end_datetime"))
-    _clock = pd.Timestamp(0) + pd.Timedelta(hours=seen_at)
+    _hour = round(seen_at) % 24
     charts.images({
         f"Landsat · {scene.datetime:%d %b %Y}, 10:40 am · 30 m": lst,
-        f"MODIS Terra · nights of {_start:%d}–{_end:%d %b %Y}, ~{_clock:%I:%M %p} · 1 km": lst_night,
+        f"MODIS Terra · nights of {_start:%d}–{_end:%d %b %Y}, ~{_hour % 12 or 12} {'pm' if _hour >= 12 else 'am'} · 1 km": lst_night,
     }, "surface temperature, °C")
     return
 
@@ -200,7 +200,7 @@ def _(charts, squares):
         squares,
         {"Day, 10:40 am (Landsat)": "lst_day", "Night, ~10 pm and ~2:30 am (MODIS)": "lst_night"},
         "surface °C",
-        domains={"Day, 10:40 am (Landsat)": [34, 44], "Night, ~10 pm and ~2:30 am (MODIS)": [22, 27]},
+        domains={"Day, 10:40 am (Landsat)": [34, 44], "Night, ~10 pm and ~2:30 am (MODIS)": [21, 25]},
     )
     return
 
@@ -237,7 +237,8 @@ def _(datapack, load_wards, ward_labels, zonal_stats):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    `zonal_stats` drops every square into its ward's bucket and averages each bucket; here are 16 wards in the old city:
+    `zonal_stats` drops every square into its ward's bucket and averages each bucket; here are 16 wards around
+    Padarayanapura (a ward cut by the box edge shows the average of all its squares, also those outside the box):
     """)
     return
 
@@ -252,7 +253,7 @@ def _(charts, labels, lst_day, wards):
 @app.cell(hide_code=True)
 def _(charts, ward_temp, wards):
     _g = charts.ward_shapes(wards, ward_temp.reset_index().rename(columns={"lst_mean": "lst"}))
-    charts.ward_map(_g, {"surface temperature, 10:40 am": "lst"}, "°C")
+    charts.ward_map(_g, {"surface temperature, 10:40 am": "lst"}, "surface °C", title="Surface temperature, 10:40 am")
     return
 
 
@@ -261,7 +262,7 @@ def _(mo, ward_temp, wards):
     _t = ward_temp["lst_mean"]
     _names = wards.set_index("ward_uid")["label"]
     mo.md(f"""
-    **{_names[_t.idxmax()]}** has the highest surface temperature ({_t.max():.1f} °C), **{_names[_t.idxmin()]}** the lowest ({_t.min():.1f} °C): {_t.max() - _t.min():.1f} °C apart.
+    **{_names[_t.idxmax()]}** has the highest surface temperature ({_t.max():.1f} °C), **{_names[_t.idxmin()]}** the lowest ({_t.min():.1f} °C): {round(_t.max(), 1) - round(_t.min(), 1):.1f} °C apart.
 
     ## Try it
 
@@ -285,21 +286,19 @@ def _(catalog):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    3. MODIS surface temperature by day: change `LST_Night_1km` to `LST_Day_1km`.
+    3. MODIS surface temperature by day: the same Terra file as above, with the `LST_Day_1km` band:
     """)
     return
 
 
 @app.cell
-def _(catalog, charts, np):
+def _(charts, np, terra):
     import odc.stac as _stac
 
-    _items = catalog.search(collections=["modis-11A2-061"], bbox=[77.45, 12.82, 77.80, 13.155],
-                            datetime="2024-04-01/2024-04-30").item_collection()
-    _day = _stac.load([i for i in _items if i.id.startswith("MOD")][:1], bands=["LST_Day_1km"],
-                      bbox=[77.45, 12.82, 77.80, 13.155], crs="EPSG:32643", resolution=1000)
+    _day = _stac.load([terra], bands=["LST_Day_1km"], bbox=[77.45, 12.82, 77.80, 13.155], crs="EPSG:32643", resolution=1000)
     _dn = _day["LST_Day_1km"].values[0].astype("float32")
-    charts.image(np.where(_dn > 0, _dn * 0.02 - 273.15, np.nan), "surface temperature, °C")
+    charts.images({"MODIS Terra by day, same 8 days · 1 km": np.where(_dn > 0, _dn * 0.02 - 273.15, np.nan)},
+                  "surface temperature, °C")
     return
 
 

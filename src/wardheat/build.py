@@ -159,11 +159,12 @@ def run(steps: list[str] | None = None, force: bool = False) -> None:
 # Recipes: how each prepared file the charts read is made, shown folded under the chart
 # ---------------------------------------------------------------------------
 def _recipes() -> dict:
-    from . import climate, landcover, landsat
+    from . import climate, features, landcover, landsat, modis
 
     return {  # name -> (prepared file, the code that makes it, build steps to run, what making it reads)
-        "lst": ("lst_day", [step_landsat, landsat.median_composite, step_modis], ["landsat", "modis", "features"],
-                "44 Landsat passes and 105 MODIS night composites from Planetary Computer, about 8 minutes"),
+        "lst": ("pixels", [step_landsat, landsat.median_composite, step_modis, modis.night_lst, features.pixel_table],
+                ["landsat", "modis", "landcover", "canopy", "features"],
+                "44 Landsat passes and 105 MODIS 8-day files from Planetary Computer, about 12 minutes"),
         "canopy": ("canopy_frac", [step_canopy, landcover.canopy_fraction], ["canopy", "features"],
                    "Meta and WRI's ~1 m tree-height map over the whole city, about 3 minutes"),
         "era5": ("era5_daily", [climate.era5_daily, step_climate], ["climate"],

@@ -87,6 +87,11 @@ def _prose(raw: str, toc: list) -> str:
     return f'<div class="prose">{raw}</div>'
 
 
+def _number(v: float) -> str:
+    """A table number as precise as the data, up to 3 decimals: 26124.0 -> 26,124; 1.4231 -> 1.423."""
+    return f"{v:,.3f}".rstrip("0").rstrip(".")
+
+
 def _output_html(obj, n: int, toc: list, charts: dict) -> str:
     if obj is None:
         return ""
@@ -100,7 +105,8 @@ def _output_html(obj, n: int, toc: list, charts: dict) -> str:
         return f'<figure class="chart"><div id="{cid}"></div></figure>'
     if isinstance(obj, pd.DataFrame):
         index = not isinstance(obj.index, pd.RangeIndex)
-        return f'<div class="table">{obj.to_html(index=index, border=0, classes="data", na_rep="", float_format=lambda v: f"{v:,.1f}")}</div>'
+        obj = obj.round(3)
+        return f'<div class="table">{obj.to_html(index=index, border=0, classes="data", na_rep="", float_format=_number)}</div>'
     if hasattr(obj, "savefig"):  # matplotlib figure
         buf = io.BytesIO()
         obj.savefig(buf, format="webp", dpi=110, bbox_inches="tight", facecolor="none", pil_kwargs={"quality": 88, "method": 6})

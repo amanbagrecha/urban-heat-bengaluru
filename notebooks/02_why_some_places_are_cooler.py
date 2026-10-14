@@ -27,9 +27,9 @@ def _(mo):
 
     <div class="lead">What covers the ground decides its surface temperature.</div>
 
-    Tree cover (`canopy`) comes from Meta and WRI's tree-height map: an AI model measured the height of every ~1 m spot
+    Tree cover (`canopy`) comes from Meta and WRI's tree-height map: an AI model estimated the height of every ~1 m spot
     from Maxar satellite photos taken mostly in 2018–2020, and we count the share of each square under trees taller than 3 m.
-    Buildings (`built`) and water come from ESA's WorldCover map, which sorts every 10 m cell into trees, crops, buildings,
+    Buildings and roads (`built`) and water come from ESA's WorldCover map, which sorts every 10 m cell into trees, crops, buildings,
     water and so on from 2021 Sentinel-1 radar and Sentinel-2 photos. Each 240 m square is the average of its 8 × 8 squares
     of 30 m:
     """)
@@ -77,7 +77,7 @@ def _(mo):
 
 @app.cell
 def _(np, px):
-    built = px[px.built > 0.5]  # squares that are mostly buildings and roads
+    built = px[px.built > 0.5]  # squares more than half buildings and roads
 
     # fit a straight line: surface temperature = slope × canopy + intercept
     slope, intercept = np.polyfit(built.canopy, built.lst_day, deg=1)
@@ -87,7 +87,8 @@ def _(np, px):
 @app.cell(hide_code=True)
 def _(built, mo, slope):
     mo.md(f"""
-    Every extra 10 % of tree cover ≈ **{-slope * 0.1:.1f} °C lower** surface temperature ({len(built):,} built-up squares).
+    Every extra 10 % of tree cover ≈ **{-slope * 0.1:.1f} °C lower** surface temperature ({len(built):,} squares more than half
+    built-up).
 
     ## Day and night
     """)
@@ -103,11 +104,13 @@ def _(charts, px):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Farmland has the highest surface temperature by day and is cool at night; concrete stays warm after dark: the **urban heat island**.
+    Farmland has the highest surface temperature by day and is cool at night; built-up squares stay warm after dark: the
+    **urban heat island**. At night MODIS sees 1 km blocks, so a park takes on the warmth of the streets around it; only the
+    farmland-versus-city gap is clear.
 
     ## Try it
 
-    1. Box the bluest dots: which lakes? 2. Box hot squares with no trees: which wards? 3. Densest squares only:
+    1. Box the coolest dots at the bottom: which lakes? 2. Box hot squares with no trees: which wards? 3. Densest squares only:
     """)
     return
 

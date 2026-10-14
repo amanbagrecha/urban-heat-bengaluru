@@ -2,7 +2,8 @@
 
 Landsat only flies over at ~10:40 in the morning. To know which wards *stay*
 hot at night (no overnight relief = the dangerous part of a heatwave), we use
-MODIS night passes: Terra ~22:30 and Aqua ~01:30 local time.
+MODIS night passes. Both orbits are drifting; in March-May 2022-26 Night_view_time puts Terra at about
+22:00 and Aqua at about 02:30 India time.
 
 We use the 8-day composites (``modis-11A2-061``) rather than the daily files
 of MOD11A1/MYD11A1: ~10x fewer files to read, already cloud-screened, and we take a
@@ -30,7 +31,8 @@ def night_lst(items_: list, grid: Grid, coarse_res: float = 1000.0, which: str =
     import odc.stac
 
     coarse = grid.coarsen(int(round(coarse_res / grid.res)))
-    ds = odc.stac.load(items_, bands=[which], geobox=coarse.geobox(), resampling="nearest", fail_on_error=False)
+    # one layer per file: Terra's and Aqua's files for the same 8 days share a date, and grouping by date would merge them
+    ds = odc.stac.load(items_, bands=[which], geobox=coarse.geobox(), resampling="nearest", fail_on_error=False, groupby="id")
     dn = ds[which].astype("float32")
     lst = (dn * 0.02 - 273.15).where(dn > 0)
     med = lst.median("time", skipna=True).values.astype("float32")

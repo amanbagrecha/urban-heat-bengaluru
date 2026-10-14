@@ -27,7 +27,7 @@ PEOPLE = ["#f4f0e6", "#dccbe0", "#b08fbf", "#7c5795", "#4a2b63"]
 COVER = {"trees": "#4f7d4a", "water": "#3d7ea6", "mixed": "#b9b2a5", "built-up": "#8c5a4a", "farmland": "#d1a24f"}
 RISK = {"Low": "#ece4cf", "Medium": "#e9a35a", "High": "#b23a2e"}
 LEVELS = ["Green", "Yellow", "Orange", "Red", "Magenta"]
-LEVEL_COLORS = ["#e2ddcf", "#f2cf5b", "#e8893a", "#c8442d", "#7d2a5c"]
+LEVEL_COLORS = ["#d9e6cc", "#f2cf5b", "#e8893a", "#c8442d", "#7d2a5c"]
 ALERTS = ["No alert", "Take care", "Heat alert", "Emergency"]
 ALERT_COLORS = ["#e2ddcf", "#f2cf5b", "#e8893a", "#b23a2e"]
 MATRIX = {"Low": [0, 0, 1, 2, 3], "Medium": [0, 1, 1, 2, 3], "High": [0, 1, 2, 3, 3]}  # = warning.ALERT_MATRIX
@@ -84,7 +84,7 @@ def ward_shapes(wards: gpd.GeoDataFrame, table: pd.DataFrame | None = None, keep
     g = g.copy()
     g["geometry"] = g.geometry.simplify(0.0003, preserve_topology=True).set_precision(1e-5)
     for c in g.columns:
-        if c != "geometry" and pd.api.types.is_float_dtype(g[c]):
+        if c not in ("geometry", "H", "E", "V", "score") and pd.api.types.is_float_dtype(g[c]):
             g[c] = g[c].round(3)
     return g
 
@@ -240,7 +240,7 @@ def greens_explorer(px: pd.DataFrame):
 
     Drag a box on the scatter: the matching cells light up on the map. Cubbon Park and Lalbagh are labelled.
     """
-    brush = alt.selection_interval(name="brush", encodings=["x", "y"], value={"x": [0.35, 1.0], "y": [30, 46]})
+    brush = alt.selection_interval(name="brush", encodings=["x", "y"], value={"x": [0.35, 1.0], "y": [29, 47]})
     data, names = _cells(px, {"canopy": "canopy", "lst": "lst_day", "cover": "cover"})
     base = alt.Chart(data).transform_lookup(lookup="w", from_=names)
     tips = [alt.Tooltip("ward:N", title="ward"), alt.Tooltip("canopy:Q", format=".0%", title="tree canopy"),
@@ -249,14 +249,15 @@ def greens_explorer(px: pd.DataFrame):
         base.mark_circle(size=7)
         .encode(
             x=alt.X("canopy:Q", title="tree canopy cover", axis=alt.Axis(format="%")),
-            y=alt.Y("lst:Q", title="surface temperature, 10:40 am (°C)", scale=alt.Scale(domain=[30, 46], clamp=True)),
+            y=alt.Y("lst:Q", title="surface temperature, 10:40 am (°C)", scale=alt.Scale(domain=[29, 47], nice=False)),
             color=alt.when(brush).then(alt.Color("cover:N", scale=alt.Scale(domain=list(COVER), range=list(COVER.values())),
                                                  legend=alt.Legend(title=None))).otherwise(alt.value("#dcd6c8")),
             opacity=alt.value(0.55),
             tooltip=tips,
         )
         .add_params(brush)
-        .properties(width=330, height=330, title=alt.Title("Each dot is a 240 m patch of the city", subtitle="Drag a box over any group of dots"))
+        .properties(width=330, height=330, title=alt.Title("Each dot is a 240 m patch of the city",
+                                                           subtitle="Drag a box over any group of dots; dashed: trend through all dots"))
     )
     trend = base.transform_regression("canopy", "lst").mark_line(color=INK, strokeWidth=1.5, strokeDash=[4, 3]).encode(x="canopy:Q", y="lst:Q")
     xy = _grid_xy(px, 2.6)
@@ -313,10 +314,10 @@ def ingredient_maps(g: gpd.GeoDataFrame, width: int = 215, height: int = 240):
     maps = []
     for col, title, subtitle, scale, fmt, tip in [
         ("surface_temp", "Surface temperature", "°C, average of 10:40 am and night",
-         alt.Scale(range=HEAT, domain=[31, 34], clamp=True), ".2f", "surface °C"),
-        ("people_per_ha", "People", "per hectare", alt.Scale(range=PEOPLE[1:], type="log", domain=[10, 1500], clamp=True), ",.0f",
-         "people per hectare"),
-        ("trees", "Tree cover", "% of the ward under trees", alt.Scale(range=TREES[1:], domain=[0, 0.4], clamp=True), ".1%",
+         alt.Scale(range=HEAT, domain=[29.5, 34.5]), ".2f", "surface °C"),
+        ("people_per_ha", "People", "per hectare (log colour scale)", alt.Scale(range=PEOPLE[1:], type="log", domain=[10, 1500]),
+         ",.0f", "people per hectare"),
+        ("trees", "Tree cover", "% of the ward under trees", alt.Scale(range=TREES[1:], domain=[0, 0.6]), ".1%",
          "tree cover"),
     ]:
         maps.append(
@@ -425,7 +426,7 @@ def heat_calendar(hr: pd.DataFrame, first_year: int = 2024):
         x=alt.value(0), y=alt.value(0), text="year:O")
     detail = (tmax + tmin + p95x + p95n + strip + label).properties(
         width=560, height=340,
-        title=alt.Title("Daily highest (red) and lowest (blue) air temperature, ERA5", subtitle="Dashed: hotter than 95 of 100 days around that date. Strip: the level"),
+        title=alt.Title("Daily highest (red) and lowest (blue) air temperature, ERA5", subtitle="Dashed: the 'hot' line for each date. Strip: the level"),
     )
     return alt.vconcat(cal, detail, spacing=28)
 
@@ -502,10 +503,10 @@ def zonal_explainer(values: np.ndarray, labels: np.ndarray, names: pd.Series, ro
         color=alt.when("isValid(datum.v)").then(alt.Color("v:Q", scale=heat, legend=alt.Legend(title="surface °C", orient="bottom",
                                                                                                gradientLength=260, gradientThickness=8)))
         .otherwise(alt.value("#e9e5dc")),
-        tooltip=[alt.Tooltip("ward:N"), alt.Tooltip("v:Q", format=".1f", title="this square, °C")])
+        tooltip=[alt.Tooltip("ward:N"), alt.Tooltip("v:Q", format=".1f", title="this square, surface °C")])
     right = alt.Chart(cells).mark_rect().encode(
         x=x, x2="x2:Q", y=y, y2="y2:Q", color=alt.Color("m:Q", scale=heat, legend=None),
-        tooltip=[alt.Tooltip("ward:N"), alt.Tooltip("m:Q", format=".1f", title="ward average, °C")])
+        tooltip=[alt.Tooltip("ward:N"), alt.Tooltip("m:Q", format=".1f", title="ward average, surface °C")])
     layers_r = [right, borders]
     if mark is not None and (lab == mark).any():
         r_, c_ = np.nonzero(lab == mark)
@@ -526,12 +527,12 @@ def levels_explainer(era5: pd.DataFrame, normal: pd.DataFrame, day: str = "2024-
     d = pd.Timestamp(day)
     doy = d.dayofyear
     cuts = [max(normal.loc[doy, f"tmax_p{p}"], normal[f"tmax_ann_p{p}"].iloc[0]) for p in ("90", "95", "98", "99_5")]
-    usual = float(normal.loc[doy, "tmax_p50"])
+    usual = float(normal.loc[doy, "tmax_mean"])
     that = float(era5.loc[day, "tmax"])
     lo, hi = np.floor(usual - 2), np.ceil(max(that, cuts[-1]) + 1)
     zones = pd.DataFrame({
         "from": [lo, *cuts], "to": [*cuts, hi],
-        "words": ["normal", "warm", "hot", "very hot", "extreme"],
+        "words": ["below the alert line", "warm", "hot", "very hot", "extreme"],
         "share": ["90", "5", "3", "1.5", "0.5"],
         "ink": [INK, INK, INK, PAPER, PAPER],
     })
@@ -545,7 +546,7 @@ def levels_explainer(era5: pd.DataFrame, normal: pd.DataFrame, day: str = "2024-
     words = mid.mark_text(fontSize=11, fontWeight="bold").encode(x="m:Q", y=alt.value(62), text="words:N",
                                                                  color=alt.Color("ink:N", scale=None))
     share = mid.mark_text(fontSize=11).encode(x="m:Q", y=alt.value(82), text="share:N", color=alt.Color("ink:N", scale=None))
-    marks = pd.DataFrame({"t": [usual, that], "label": [f"a usual day: {usual:.1f} °C", f"{d:%d %b %Y}: {that:.1f} °C"]})
+    marks = pd.DataFrame({"t": [usual, that], "label": [f"an average day: {usual:.1f} °C", f"{d:%d %b %Y}: {that:.1f} °C"]})
     pin = alt.Chart(marks).mark_rule(color=INK, strokeWidth=2).encode(x="t:Q", y=alt.value(28), y2=alt.value(100))
     pin_text = alt.Chart(marks).mark_text(fontSize=11, color=INK, dy=-2, baseline="bottom").encode(
         x="t:Q", y=alt.value(28), text="label:N")
