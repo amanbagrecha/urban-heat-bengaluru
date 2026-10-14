@@ -40,14 +40,15 @@ def _(mo):
 @app.cell
 def _(datapack):
     f = datapack.table("ward_features")  # one row per ward: heat, people, trees
-    f[["label", "lst_built", "lst_night", "pop_density", "canopy_frac"]].head()
+    f["people_per_ha"] = (f.pop_density / 100).round()  # people per hectare, the same unit as the map below
+    f[["label", "lst_built", "lst_night", "people_per_ha", "canopy_frac"]].head()
     return (f,)
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    People per hectare, in 240 m squares:
+    The same people per hectare (a 100 m × 100 m patch), now square by square: darker is more crowded.
     """)
     return
 
@@ -89,7 +90,7 @@ def _(f, np):
         return ((x - lo) / (hi - lo)).clip(0.05, 1)
 
     H = (scale(f.lst_built) + scale(f.lst_night)) / 2  # hazard: hot by day and at night
-    E = scale(np.log(f.pop_density))  # exposure: people per km² (log: twice as crowded counts more, not double)
+    E = scale(np.log(f.people_per_ha))  # exposure: how crowded (log: twice as crowded counts more, not double)
     V = scale(-f.canopy_frac)  # vulnerability: the less canopy, the higher
     risk = (H * E * V) ** (1 / 3) * 100  # multiply; the cube root keeps it on the same 0-100 scale
     return E, H, V, risk
@@ -108,7 +109,7 @@ def _(E, H, V, charts, f, risk, wards):
     from wardheat.indices import classify
 
     table = f.assign(H=H, E=E, V=V, score=risk, risk=classify(risk))
-    g = charts.ward_shapes(wards, table, keep=["H", "E", "V", "risk", "score", "lst_built", "lst_night", "pop_density", "canopy_frac"])
+    g = charts.ward_shapes(wards, table, keep=["H", "E", "V", "risk", "score", "lst_built", "lst_night", "people_per_ha", "canopy_frac"])
     charts.ward_map(g, {"Heat (H)": "H", "People (E)": "E", "Lack of shade (V)": "V"}, "0 = lowest, 1 = highest", fmt=".2f")
     return (g,)
 

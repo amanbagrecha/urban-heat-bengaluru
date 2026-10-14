@@ -295,7 +295,7 @@ def risk_explorer(g: gpd.GeoDataFrame):
     )
     risk_color = alt.Color("risk:N", scale=alt.Scale(domain=list(RISK), range=list(RISK.values())), legend=alt.Legend(title=None))
     extra = {"lst_built": (".1f", "day °C (built-up)"), "lst_night": (".1f", "night °C"),
-             "pop_density": (",.0f", "people / km²"), "canopy_frac": (".0%", "tree canopy")}
+             "pop_density": (",.0f", "people / km²"), "people_per_ha": (",.0f", "people / hectare"), "canopy_frac": (".0%", "tree canopy")}
     tips = [alt.Tooltip("label:N", title="ward"), alt.Tooltip("risk:N"), alt.Tooltip("score:Q", format=".0f")]
     tips += [alt.Tooltip(f"{c}:Q", format=f, title=t) for c, (f, t) in extra.items() if c in g.columns]
     city = (
