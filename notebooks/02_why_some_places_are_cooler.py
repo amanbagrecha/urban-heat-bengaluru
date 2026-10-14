@@ -31,7 +31,13 @@ def _(mo):
     from Maxar satellite photos taken mostly in 2018–2020, and we count the share of each square under trees taller than 3 m.
     Buildings and roads (`built`) and water come from ESA's WorldCover map, which sorts every 10 m cell into trees, crops, buildings,
     water and so on from 2021 Sentinel-1 radar and Sentinel-2 photos. Each 240 m square is the average of its 8 × 8 squares
-    of 30 m:
+    of 30 m.
+
+    **See it, get it.** [Meta's tree-height viewer](https://meta-forest-monitoring-okw37.projects.earthengine.app/view/canopyheight)
+    shows the whole world, and the files are on [AWS Open Data](https://registry.opendata.aws/dataforgood-fb-forests/): the
+    one file under Bengaluru is 477 MB, so we read it once and keep only the tree share per 30 m square (6 MB). The
+    [WorldCover viewer](https://viewer.esa-worldcover.org/worldcover/) shows the world at 10 m; Bengaluru's 3° × 3° tile is
+    128 MB. Download the 240 m table:
     """)
     return
 

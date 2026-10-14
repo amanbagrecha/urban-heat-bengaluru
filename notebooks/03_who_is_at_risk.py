@@ -33,7 +33,9 @@ def _(mo):
 
     Surface temperature and tree cover come from satellites on the same 30 m squares (lessons 1 and 2). People come from
     the Census 2011 headcount of each ward, carried in the GBA ward file: the latest official count, as India's next census
-    counts people in February 2027. Download them:
+    counts people in February 2027. The ward map with every headcount is on
+    [OpenCity](https://data.opencity.in/dataset/gba-wards-delimitation-2025) (KML: opens in QGIS or Google Earth).
+    Download them:
     """)
     return
 

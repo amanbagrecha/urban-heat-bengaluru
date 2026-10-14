@@ -121,6 +121,18 @@ def _(mo, scene):
     Surface temperature at 10:40 am on {scene.datetime:%d %B %Y} ({scene.properties["platform"].title()}, the clearest picture
     of March–May 2024): pale is cooler (lakes, parks and the leafy centre), dark is hotter (bare farmland at the edges).
 
+    **See it, get it.** Every Landsat picture of the world is on
+    [Planetary Computer's Explorer](https://planetarycomputer.microsoft.com/explore?d=landsat-c2-l2) and
+    [USGS EarthExplorer](https://earthexplorer.usgs.gov/) (free login to download). This picture's thermal file is 88.5 MB
+    and covers 231 × 227 km; our code reads only the 38 × 38 km over Bengaluru, about 1/36 of it, straight from the cloud.
+    To keep the whole file, paste this into a new cell:
+
+    ```python
+    import requests
+    with open("landsat_thermal.tif", "wb") as out:  # 88.5 MB; open it in QGIS or with rasterio
+        out.write(requests.get(scene.assets["lwir11"].href).content)
+    ```
+
     ## At night: another satellite
 
     Landsat only passes in the morning. **MODIS**, a camera on NASA's Terra and Aqua satellites, also passes at night, in
@@ -169,6 +181,11 @@ def _(charts, lst, lst_night, pd, scene, seen_at, terra):
 def _(lst, lst_night, mo, np):
     mo.md(f"""
     Same week, two satellites: the surface temperature is {np.nanmean(lst) - np.nanmean(lst_night):.0f} °C lower at night, and the centre stays warmest.
+
+    **See it, get it.** [NASA Worldview](https://worldview.earthdata.nasa.gov/) maps MODIS surface temperature for the whole
+    world, day by day (search its layers for "land surface temperature"); the files download from
+    [NASA Earthdata](https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod11a2-061). Each file covers a tile of about
+    1,100 × 1,100 km, and again we read only Bengaluru's part.
 
     ## Five summers in one map
 

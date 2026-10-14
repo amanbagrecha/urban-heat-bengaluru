@@ -32,7 +32,13 @@ def _(mo):
     First, 35 years of each day's highest (`tmax`) and lowest (`tmin`) air temperature from ERA5: ECMWF, Europe's weather
     centre, rebuilds past weather hour by hour on ~25 km squares by feeding station, balloon and satellite readings into a
     weather model. A 25 km square mixes town and countryside, so it reads about 1.5 °C below the city's weather station on
-    March–May afternoons:
+    March–May afternoons.
+
+    **See it, get it.** [Climate Pulse](https://pulse.climate.copernicus.eu/) maps ERA5's air temperature for the whole
+    world, day by day; the full data is on the
+    [Climate Data Store](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels) (free account), and
+    [Open-Meteo](https://open-meteo.com/en/docs/historical-weather-api) gives any point's daily values as a CSV, which is
+    what we download for Bengaluru (35 years in 0.2 MB):
     """)
     return
 
@@ -111,7 +117,9 @@ def _(levels, mo):
 
     Open-Meteo gives each coming day's highest and lowest air temperature from the sharpest weather model for the place,
     for Bengaluru ECMWF's 9 km model; we subtract the forecast models' average difference from ERA5 for that month
-    (2022–2026), so the forecast is on the same scale as the 35 years:
+    (2022–2026), so the forecast is on the same scale as the 35 years. [ECMWF's charts](https://charts.ecmwf.int/) map
+    this forecast for the whole world, and Open-Meteo's [forecast page](https://open-meteo.com/en/docs) gives any point's
+    as a table or CSV:
     """)
     return
 
@@ -168,6 +176,40 @@ def _(alerts, charts, hot_day, load_wards, tomorrow):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ## Sending the alerts
+
+    Every warned ward gets a message for its officers and residents; when tomorrow has no alerts, the cell shows what this
+    year's hottest day would have sent:
+    """)
+    return
+
+
+@app.cell
+def _(alerts, hot_day, load_wards, tomorrow):
+    day, when = ("tomorrow", tomorrow) if (alerts.tomorrow != "No alert").any() else ("hot_day", hot_day)
+    advice = {
+        "Take care": "drink water often and stay out of the sun from 12 noon to 3 pm.",
+        "Heat alert": "stay out of the sun from 12 noon to 3 pm, drink water and ORS, check on older neighbours and outdoor workers.",
+        "Emergency": "stay indoors from 12 noon to 3 pm, drink water and ORS, call 108 for anyone who collapses in the heat.",
+    }
+    send = alerts.loc[alerts[day] != "No alert", [day]].rename(columns={day: "alert"})
+    send.insert(0, "ward", load_wards().set_index("ward_uid")["label"])
+    send["message"] = send.alert.map(lambda a: f"{a} for {when.name:%d %B}: {when.tmax:.0f} °C air temperature; " + advice[a])
+    send.sort_values(["alert", "ward"]).head(10)
+    return (send,)
+
+
+@app.cell(hide_code=True)
+def _(mo, send):
+    mo.md(f"""
+    {len(send)} messages in all: {", ".join(f"{n} {a}" for a, n in send.alert.value_counts().items())}.
+
+    ## The same idea, live
+
+    The US weather service runs this every day: its [HeatRisk map](https://www.wpc.ncep.noaa.gov/heatrisk/) colours the
+    whole country green to magenta for the next 7 days by comparing the forecast with local records, and
+    [heat.gov](https://www.heat.gov/) tells people what to do.
+
     ## Try it
 
     1. Click 2016 and 2019 in the calendar. 2. Three hot days in a row instead of two:
