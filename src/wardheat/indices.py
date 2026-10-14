@@ -1,17 +1,9 @@
-"""Ward heat risk = Hazard × Exposure × Vulnerability (IPCC AR6).
+"""Ward heat risk = heat × crowding × lack of shade (hazard × exposure × vulnerability, IPCC AR6).
 
-    H  hazard         how hot the ward gets: built-up surfaces by day + the night
-    E  exposure       how many people live there (people per km²)
-    V  vulnerability  how little tree shade there is
-
-Recipe
-------
-1. Scale each ingredient to 0-1 between the city's 5th and 95th percentile, so
-   the result ranks wards *within* Bengaluru. Floor at 0.05 so a single zero
-   cannot wipe a ward out.
-2. Combine with a geometric mean, ``(H·E·V)^(1/3)``: a ward has to score on
-   all three to rank high. Extreme heat where nobody lives is not high risk.
-3. Top 30 % of wards → High, next 30 % → Medium, the rest → Low.
+Each ingredient is a rank among the city's wards, from 0 to 1: heat 0.88 means hotter than 88 % of
+wards (percentile ranks, as in the US CDC's Social Vulnerability Index). Multiplying them means a
+ward only scores high when all three are high. Top 30 % of wards → High, next 30 % → Medium, the
+rest → Low.
 """
 
 from __future__ import annotations
@@ -37,9 +29,9 @@ def classify(score: pd.Series, cuts=(40, 70)) -> pd.Series:
 
 
 def ward_risk(f: pd.DataFrame) -> pd.DataFrame:
-    """H, E, V (0-1), the risk score (0-100) and class for every ward of the feature table."""
-    H = (scale01(f["lst_built"]) + scale01(f["lst_night"])) / 2
-    E = scale01(np.log(f["pop_density"]))  # log: a 2x denser ward is not 2x the risk
-    V = scale01(-f["canopy_frac"])
-    score = (H * E * V) ** (1 / 3) * 100
+    """H, E, V (ranks 0-1), the risk score (their product) and class for every ward of the feature table."""
+    H = (f["lst_built"].rank(pct=True) + f["lst_night"].rank(pct=True)) / 2  # hotter by day and at night
+    E = f["pop_density"].rank(pct=True)  # more crowded
+    V = (-f["canopy_frac"]).rank(pct=True)  # less tree shade
+    score = H * E * V
     return pd.DataFrame({"H": H, "E": E, "V": V, "score": score, "risk": classify(score)}, index=f.index)

@@ -276,6 +276,34 @@ def day_night_by_cover(px: pd.DataFrame):
 # ---------------------------------------------------------------------------
 # Lesson 3: who is at risk?
 # ---------------------------------------------------------------------------
+def ingredient_maps(g: gpd.GeoDataFrame, width: int = 215, height: int = 240):
+    """Heat, crowding and lack of shade as three small ward maps; each is a rank among wards (0-1).
+
+    ``g`` needs ``label``, ``H``, ``E``, ``V`` and the real values ``lst_built``, ``lst_night``,
+    ``people_per_ha``, ``canopy_frac`` for the tooltips.
+    """
+    color = alt.Color("rank:Q", scale=alt.Scale(range=HEAT, domain=[0, 1]),
+                      legend=alt.Legend(title="share of wards it beats", format=".0%", orient="bottom",
+                                        gradientLength=300, gradientThickness=8))
+    maps = []
+    for col, title, beats, real in [
+        ("H", "Heat", "hotter than", [alt.Tooltip("lst_built:Q", format=".1f", title="day °C"),
+                                      alt.Tooltip("lst_night:Q", format=".1f", title="night °C")]),
+        ("E", "Crowding", "more crowded than", [alt.Tooltip("people_per_ha:Q", format=",.0f", title="people / hectare")]),
+        ("V", "Lack of shade", "less shaded than", [alt.Tooltip("canopy_frac:Q", format=".0%", title="tree cover")]),
+    ]:
+        maps.append(
+            alt.Chart(g, title=alt.Title(title, subtitle=f"{beats} … of wards"))
+            .transform_calculate(rank=f"datum.{col}")
+            .mark_geoshape(stroke=PAPER, strokeWidth=0.3)
+            .encode(color=color, tooltip=[alt.Tooltip("label:N", title="ward"),
+                                          alt.Tooltip("rank:Q", format=".0%", title=f"{beats} … of wards"), *real])
+            .project("mercator")
+            .properties(width=width, height=height)
+        )
+    return alt.hconcat(*maps, spacing=10)
+
+
 def risk_explorer(g: gpd.GeoDataFrame):
     """Weighted geometric mean of H, E, V computed in the browser; sliders change the weights.
 
@@ -296,7 +324,7 @@ def risk_explorer(g: gpd.GeoDataFrame):
     risk_color = alt.Color("risk:N", scale=alt.Scale(domain=list(RISK), range=list(RISK.values())), legend=alt.Legend(title=None))
     extra = {"lst_built": (".1f", "day °C (built-up)"), "lst_night": (".1f", "night °C"),
              "pop_density": (",.0f", "people / km²"), "people_per_ha": (",.0f", "people / hectare"), "canopy_frac": (".0%", "tree canopy")}
-    tips = [alt.Tooltip("label:N", title="ward"), alt.Tooltip("risk:N"), alt.Tooltip("score:Q", format=".0f")]
+    tips = [alt.Tooltip("label:N", title="ward"), alt.Tooltip("risk:N")]
     tips += [alt.Tooltip(f"{c}:Q", format=f, title=t) for c, (f, t) in extra.items() if c in g.columns]
     city = (
         base.mark_geoshape()

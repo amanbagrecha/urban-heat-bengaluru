@@ -63,10 +63,10 @@ weak Wi-Fi, fetch them all at once with `uv run wardheat datapack download` (~40
 
 ## Method in brief
 
-Each ward gets three ingredients: **hazard** (surface temperature of built-up ground by day,
-averaged with night), **exposure** (people per km², log-scaled) and **vulnerability** (lack of tree
-canopy). Each is scaled 0–1 between the city's 5th and 95th percentiles and combined with a
-geometric mean; the top 30 % of wards are High risk. The warning compares a day's max and night min
+Each ward gets three ingredients: **heat** (built-up ground by day, and the night), **crowding**
+(people per hectare) and **lack of shade** (tree cover). Each is a rank among wards from 0 to 1 (heat
+0.88 = hotter than 88 % of wards, as in the CDC's Social Vulnerability Index), and risk is their
+product; the top 30 % of wards are High risk. The warning compares a day's max and night min
 with the 1991–2020 record for that date (90/95/98/99.5th percentiles → levels 1–4, +1 for hot days
 and nights in a row). Forecasts are bias-corrected to ERA5. A ward's alert combines the city level
 with its risk class.

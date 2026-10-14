@@ -77,41 +77,41 @@ def _(mo):
     mo.md(r"""
     ## Three ingredients, one score
 
-    Each becomes a 0–1 score across wards; multiplying them means only wards high on all three score high:
+    Each ingredient becomes a rank among wards: heat 0.88 means hotter than 88 % of wards.
     """)
     return
 
 
 @app.cell
-def _(f, np):
-    def scale(x):
-        """0 = among the city's lowest 5 %, 1 = among its highest 5 %."""
-        lo, hi = x.quantile([0.05, 0.95])
-        return ((x - lo) / (hi - lo)).clip(0.05, 1)
+def _(f):
+    # rank(pct=True): 0.88 = higher than 88 % of wards
+    heat = (f.lst_built.rank(pct=True) + f.lst_night.rank(pct=True)) / 2  # day and night
+    crowding = f.people_per_ha.rank(pct=True)
+    no_shade = (-f.canopy_frac).rank(pct=True)  # less tree cover = higher
 
-    H = (scale(f.lst_built) + scale(f.lst_night)) / 2  # hazard: hot by day and at night
-    E = scale(np.log(f.people_per_ha))  # exposure: how crowded (log: twice as crowded counts more, not double)
-    V = scale(-f.canopy_frac)  # vulnerability: the less canopy, the higher
-    risk = (H * E * V) ** (1 / 3) * 100  # multiply; the cube root keeps it on the same 0-100 scale
-    return E, H, V, risk
+    risk = heat * crowding * no_shade  # high only if all three are high
+    return crowding, heat, no_shade, risk
 
 
 @app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    Darker = more risk.
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(E, H, V, charts, f, risk, wards):
+def _(charts, crowding, f, heat, no_shade, risk, wards):
     from wardheat.indices import classify
 
-    table = f.assign(H=H, E=E, V=V, score=risk, risk=classify(risk))
-    g = charts.ward_shapes(wards, table, keep=["H", "E", "V", "risk", "score", "lst_built", "lst_night", "people_per_ha", "canopy_frac"])
-    charts.ward_map(g, {"Heat (H)": "H", "People (E)": "E", "Lack of shade (V)": "V"}, "0 = lowest, 1 = highest", fmt=".2f")
+    table = f.assign(H=heat, E=crowding, V=no_shade, score=risk, risk=classify(risk))
+    g = charts.ward_shapes(wards, table, keep=["H", "E", "V", "risk", "lst_built", "lst_night", "people_per_ha", "canopy_frac"])
+    charts.ingredient_maps(g)
     return (g,)
+
+
+@app.cell(hide_code=True)
+def _(crowding, f, heat, mo, no_shade, risk):
+    _w = risk.idxmax()
+    mo.md(f"""
+    **{f.label[_w]}** is hotter than {heat[_w]:.0%} of wards, more crowded than {crowding[_w]:.0%} and
+    less shaded than {no_shade[_w]:.0%}: {heat[_w]:.2f} × {crowding[_w]:.2f} × {no_shade[_w]:.2f} =
+    **{risk[_w]:.2f}**, the city's highest risk.
+    """)
+    return
 
 
 @app.cell(hide_code=True)
@@ -141,10 +141,10 @@ def _(mo):
 
 
 @app.cell
-def _(E, H, V, f, risk):
-    plain = (H + E + V) / 3 * 100  # a plain average instead of the geometric mean
-    compare = f[["label"]].assign(geometric=risk.rank(ascending=False), plain=plain.rank(ascending=False))
-    compare.assign(moved=compare.geometric - compare.plain).nlargest(10, "moved")
+def _(crowding, f, heat, no_shade, risk):
+    plain = (heat + crowding + no_shade) / 3  # a plain average instead of multiplying
+    compare = f[["label"]].assign(multiplied=risk.rank(ascending=False), plain=plain.rank(ascending=False))
+    compare.assign(moved=compare.multiplied - compare.plain).nlargest(10, "moved")
     return
 
 
