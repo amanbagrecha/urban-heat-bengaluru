@@ -479,6 +479,52 @@ SATELLITE_SEES_HEAT = """
 """
 
 
+def zonal_explainer(values: np.ndarray, labels: np.ndarray, names: pd.Series, row: int, col: int, size: int = 60,
+                    mark: str | None = None):
+    """What zonal_stats does, on a real ``size`` x ``size`` block of 30 m squares: left, every square's value with the
+    ward borders; right, every square painted with its ward's average (over all of the ward's squares)."""
+    from .grid import zonal_stats
+
+    means = zonal_stats({"v": values}, labels)["v_mean"]
+    lab = labels[row:row + size, col:col + size]
+    val = values[row:row + size, col:col + size]
+    rr, cc = np.mgrid[0:size, 0:size]
+    cells = pd.DataFrame({"x": cc.ravel(), "y": rr.ravel(), "w": lab.ravel(), "v": np.round(val.ravel(), 1)})
+    cells = cells[cells.w > 0]
+    cells["m"] = cells.w.map(means).round(1)
+    cells["ward"] = cells.w.map(names)
+    cells[["x2", "y2"]] = cells[["x", "y"]] + 1.05  # a hair of overlap so no seams show between squares
+    edges = [dict(x=j + 1, x2=j + 1, y=i, y2=i + 1) for i in range(size) for j in range(size - 1) if lab[i, j] != lab[i, j + 1]]
+    edges += [dict(x=j, x2=j + 1, y=i + 1, y2=i + 1) for i in range(size - 1) for j in range(size) if lab[i, j] != lab[i + 1, j]]
+    x = alt.X("x:Q", scale=alt.Scale(domain=[0, size], nice=False), axis=None)
+    y = alt.Y("y:Q", scale=alt.Scale(domain=[size, 0], nice=False), axis=None)
+    lo, hi = np.nanpercentile(val[lab > 0], [5, 95])
+    heat = alt.Scale(range=HEAT, domain=[round(lo, 1), round(hi, 1)], clamp=True)
+    borders = alt.Chart(pd.DataFrame(edges)).mark_rule(color=INK, strokeWidth=1.2).encode(x=x, x2="x2:Q", y=y, y2="y2:Q")
+    left = alt.Chart(cells).mark_rect().encode(
+        x=x, x2="x2:Q", y=y, y2="y2:Q",
+        color=alt.when("isValid(datum.v)").then(alt.Color("v:Q", scale=heat, legend=alt.Legend(title="surface °C", orient="bottom",
+                                                                                               gradientLength=260, gradientThickness=8)))
+        .otherwise(alt.value("#e9e5dc")),
+        tooltip=[alt.Tooltip("ward:N"), alt.Tooltip("v:Q", format=".1f", title="this square, °C")])
+    right = alt.Chart(cells).mark_rect().encode(
+        x=x, x2="x2:Q", y=y, y2="y2:Q", color=alt.Color("m:Q", scale=heat, legend=None),
+        tooltip=[alt.Tooltip("ward:N"), alt.Tooltip("m:Q", format=".1f", title="ward average, °C")])
+    layers_r = [right, borders]
+    if mark is not None and (lab == mark).any():
+        r_, c_ = np.nonzero(lab == mark)
+        label = pd.DataFrame({"x": [c_.mean() + 0.5], "y": [r_.mean() + 0.5], "t": [str(names[mark]).split(" · ")[-1]]})
+        layers_r.append(alt.Chart(label).mark_text(fontSize=11, fontWeight=600, color=INK).encode(x=x, y=y, text="t:N"))
+    w = h = 280
+    return alt.hconcat(
+        alt.layer(left, borders).properties(width=w, height=h, title=alt.Title("Before: every 30 m square",
+                                                                                subtitle="Lines are ward borders; grey squares are not built up")),
+        alt.layer(*layers_r).properties(width=w, height=h, title=alt.Title("After zonal_stats: one number per ward",
+                                                                            subtitle="Each ward painted with the average of its squares")),
+        spacing=18,
+    )
+
+
 def built_rule(wc: np.ndarray, start: float = 5 / 9):
     """A real 600 m patch of WorldCover (10 m cells) with our 30 m squares on top; a slider sets how
     built-up a square must be to count. ``wc`` is a block of class codes whose sides are multiples of 3."""

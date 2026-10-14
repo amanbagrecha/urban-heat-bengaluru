@@ -242,7 +242,22 @@ def _(datapack, load_wards, np, ward_labels, zonal_stats):
     hot_ground = np.where(built_up, lst_day, np.nan)  # leave out squares that aren't built up
     ward_temp = zonal_stats({"lst": hot_ground}, labels)  # average per ward
     ward_temp.head()
-    return ward_temp, wards
+    return hot_ground, labels, ward_temp, wards
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    `zonal_stats` drops every square into its ward's bucket and averages each bucket; here are 16 wards in the old city:
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(charts, hot_ground, labels, wards):
+    _uid = int(wards.set_index("label").loc["Central 52 · Padarayanapura", "ward_uid"])
+    charts.zonal_explainer(hot_ground, labels, wards.set_index("ward_uid")["label"], row=681, col=342, size=60, mark=_uid)
+    return
 
 
 @app.cell(hide_code=True)
