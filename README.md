@@ -64,10 +64,9 @@ weak Wi-Fi, fetch them all at once with `uv run wardheat datapack download` (~40
 ## Method in brief
 
 Each ward gets three measurements: **surface temperature** (the average of 10:40 am Landsat over built-up
-squares and night MODIS, °C), **people per hectare** and **tree cover**. Each becomes the ward's place among
-the 369 wards, from 0 to 1 (0.95 = 95 % of wards are at or below it, percentile ranks as in the CDC's Social
-Vulnerability Index), and risk is the product of the three places; the top 30 % of wards are High risk.
-Places are relative: the middle half of wards are within 0.8 °C of each other. The warning compares a day's max and night min
+squares and night MODIS, °C), **people per hectare** and **tree cover**. Each is rescaled from 0 (the city's
+lowest ward) to 1 (its highest; for trees, 1 = the fewest trees), and risk is the product of the three; the
+top 30 % of wards are High risk. The score compares wards with each other: it says where to act first. The warning compares a day's max and night min
 with the 1991–2020 record for that date (90/95/98/99.5th percentiles → levels 1–4, +1 for hot days
 and nights in a row). Forecasts are bias-corrected to ERA5. A ward's alert combines the city level
 with its risk class.

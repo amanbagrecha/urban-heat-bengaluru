@@ -89,58 +89,61 @@ def _(datapack, day_surface_temp, load_wards, night_surface_temp, np, people, tr
     }, labels).rename(columns=lambda c: c.removesuffix("_mean"))
     f.insert(0, "ward", wards.set_index("ward_uid")["label"])
     f["surface_temp"] = (f.day_surface_temp + f.night_surface_temp) / 2  # one surface temperature: morning and night
-    f.round(2).head()
+    f = f.round({"day_surface_temp": 2, "night_surface_temp": 2, "surface_temp": 2, "trees": 3, "people_per_ha": 0})
+    f.head()
     return f, wards
 
 
 @app.cell(hide_code=True)
 def _(charts, f, wards):
-    charts.ingredient_maps(charts.ward_shapes(wards, f.assign(
-        H=f.surface_temp.rank(pct=True), E=f.people_per_ha.rank(pct=True), V=(-f.trees).rank(pct=True)).reset_index()))
+    charts.ingredient_maps(charts.ward_shapes(wards, f.reset_index(), keep=["surface_temp", "people_per_ha", "trees"]))
     return
 
 
 @app.cell(hide_code=True)
 def _(f, mo):
-    _iqr = f.surface_temp.quantile(0.75) - f.surface_temp.quantile(0.25)
+    _t, _p, _c = f.surface_temp, f.people_per_ha, f.trees * 100
     mo.md(f"""
     ## From three numbers to one score
 
-    The three numbers are in different units (°C, people, % trees), so we can't add them. Instead we line the 369 wards
-    up for each number and give every ward its place in the line, from 0 to 1: 0.95 means 95 % of wards are at or below
-    it. Multiplying the three places gives a high score only to a ward near the top of all three lines at once (hot,
-    packed and treeless), and the top 30 % of scores are High risk. A place in the line says which wards to look at first,
-    not how much hotter they are: the middle half of wards are within {_iqr:.1f} °C of each other.
+    The three numbers are in different units, so we rescale each from 0 for the city's lowest ward to 1 for its highest:
+    surface temperature from {_t.min():.2f} °C (0) to {_t.max():.2f} °C (1), people from {_p.min():,.0f} (0) to
+    {_p.max():,.0f} per hectare (1), and lack of shade from {_c.max():.1f} % tree cover (0) to {_c.min():.1f} % (1).
+    Multiplying the three gives a high score only to a ward that is hot, packed and treeless at once, and the 30 % of
+    wards with the highest scores are High risk; the score compares wards with each other, so it says where to act first.
     """)
     return
 
 
 @app.cell
 def _(f):
-    hotter = f.surface_temp.rank(pct=True)  # 0.95 = 95 % of wards have this surface temperature or lower
-    crowding = f.people_per_ha.rank(pct=True)
-    no_shade = (-f.trees).rank(pct=True)  # less tree cover = higher
+    def scale(x):  # 0 = the city's lowest ward, 1 = its highest
+        return (x - x.min()) / (x.max() - x.min())
 
-    risk = hotter * crowding * no_shade  # high only if all three are high
-    return crowding, hotter, no_shade, risk
+    hot = scale(f.surface_temp)
+    crowded = scale(f.people_per_ha)
+    no_shade = scale(-f.trees)  # 1 = the ward with the fewest trees
+
+    risk = hot * crowded * no_shade  # high only if all three are high
+    return crowded, hot, no_shade, risk
 
 
 @app.cell(hide_code=True)
-def _(charts, crowding, f, hotter, no_shade, risk, wards):
+def _(charts, crowded, f, hot, no_shade, risk, wards):
     from wardheat.indices import classify
 
-    table = f.assign(H=hotter, E=crowding, V=no_shade, score=risk, risk=classify(risk)).reset_index()
+    table = f.assign(H=hot, E=crowded, V=no_shade, score=risk, risk=classify(risk)).reset_index()
     g = charts.ward_shapes(wards, table, keep=["H", "E", "V", "risk", "surface_temp", "people_per_ha", "trees"])
     return (g,)
 
 
 @app.cell(hide_code=True)
-def _(crowding, f, hotter, mo, no_shade, risk):
+def _(crowded, f, hot, mo, no_shade, risk):
     _w = risk.idxmax()
     mo.md(f"""
-    **{f.ward[_w]}**: surface {f.surface_temp[_w]:.1f} °C, {f.people_per_ha[_w]:,.0f} people per hectare, {f.trees[_w]:.0%}
-    tree cover. Places in line: {hotter[_w]:.2f} × {crowding[_w]:.2f} × {no_shade[_w]:.2f} = **{risk[_w]:.2f}**, the city's
-    highest score.
+    **{f.ward[_w]}**: {f.surface_temp[_w]:.2f} °C → {hot[_w]:.3f}, {f.people_per_ha[_w]:,.0f} people per hectare →
+    {crowded[_w]:.3f}, {f.trees[_w]:.1%} tree cover → {no_shade[_w]:.3f}; {hot[_w]:.3f} × {crowded[_w]:.3f} ×
+    {no_shade[_w]:.3f} = **{risk[_w]:.3f}**, the city's highest score.
 
     ## Your weights
 
@@ -166,8 +169,8 @@ def _(mo):
 
 
 @app.cell
-def _(crowding, f, hotter, no_shade, risk):
-    plain = (hotter + crowding + no_shade) / 3  # a plain average instead of multiplying
+def _(crowded, f, hot, no_shade, risk):
+    plain = (hot + crowded + no_shade) / 3  # a plain average instead of multiplying
     compare = f[["ward"]].assign(multiplied=risk.rank(ascending=False), plain=plain.rank(ascending=False))
     compare.assign(moved=compare.multiplied - compare.plain).nlargest(10, "moved")
     return

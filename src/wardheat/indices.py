@@ -1,9 +1,9 @@
 """Ward heat risk = surface temperature × crowding × lack of shade (hazard × exposure × vulnerability, IPCC AR6).
 
-Each ingredient is a ward's place among the city's wards, from 0 to 1 (``rank(pct=True)``): 0.88 means 88 % of
-wards are at or below it. Surface temperature is the average of the 10:40 am (Landsat) and night (MODIS) values (percentile ranks, as in the US CDC's Social Vulnerability Index). Multiplying them means a
-ward only scores high when all three are high. Top 30 % of wards → High, next 30 % → Medium, the
-rest → Low.
+Each ingredient is rescaled from 0 (the city's lowest ward) to 1 (its highest): surface temperature (the
+average of the 10:40 am Landsat and night MODIS values, °C), people per hectare, and lack of tree cover
+(1 = the ward with the fewest trees). Multiplying them means a ward only scores high when all three are
+high. Top 30 % of wards → High, next 30 % → Medium, the rest → Low.
 """
 
 from __future__ import annotations
@@ -11,15 +11,12 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-FLOOR = 0.05
 CLASS_ORDER = ["Low", "Medium", "High"]
 
 
-def scale01(x: pd.Series, floor: float = FLOOR) -> pd.Series:
-    """0 = among the city's lowest 5 %, 1 = among the highest 5 %."""
-    x = pd.Series(x, dtype="float64")
-    lo, hi = np.nanpercentile(x, [5, 95])
-    return ((x - lo) / (hi - lo)).clip(floor, 1)
+def scale(x: pd.Series) -> pd.Series:
+    """0 = the city's lowest ward, 1 = its highest."""
+    return (x - x.min()) / (x.max() - x.min())
 
 
 def classify(score: pd.Series, cuts=(40, 70)) -> pd.Series:
@@ -43,13 +40,14 @@ def ward_table(wards=None) -> pd.DataFrame:
                      "people_per_ha": datapack.layer("pop") / 0.09}, labels)
     f = f.rename(columns=lambda c: c.removesuffix("_mean"))
     f.insert(0, "ward", wards.set_index("ward_uid")["label"])
-    return f
+    f["surface_temp"] = (f.day_surface_temp + f.night_surface_temp) / 2
+    return f.round({"day_surface_temp": 2, "night_surface_temp": 2, "surface_temp": 2, "trees": 3, "people_per_ha": 0})
 
 
 def ward_risk(f: pd.DataFrame) -> pd.DataFrame:
-    """Surface temperature, crowding and lack of shade as places among wards (0-1), their product and the class."""
-    H = ((f["day_surface_temp"] + f["night_surface_temp"]) / 2).rank(pct=True)  # surface (satellite), morning and night
-    E = f["people_per_ha"].rank(pct=True)  # more crowded
-    V = (-f["trees"]).rank(pct=True)  # less tree shade
+    """Surface temperature, crowding and lack of shade, each from 0 (lowest ward) to 1 (highest), their product and the class."""
+    H = scale(f["surface_temp"])  # surface (satellite), average of morning and night
+    E = scale(f["people_per_ha"])  # more crowded
+    V = scale(-f["trees"])  # fewer trees
     score = H * E * V
     return pd.DataFrame({"H": H, "E": E, "V": V, "score": score, "risk": classify(score)}, index=f.index)

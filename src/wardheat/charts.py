@@ -308,26 +308,24 @@ def day_night_by_cover(px: pd.DataFrame):
 def ingredient_maps(g: gpd.GeoDataFrame, width: int = 215, height: int = 240):
     """What was measured in each ward, in real units: surface temperature, people per hectare, tree cover.
 
-    ``g`` needs ``label``, ``surface_temp`` (°C), ``people_per_ha``, ``trees`` (0-1), and the places in line
-    ``H``, ``E``, ``V`` (0-1) for the tooltips.
+    ``g`` needs ``label``, ``surface_temp`` (°C), ``people_per_ha`` and ``trees`` (0-1).
     """
     maps = []
-    for col, title, subtitle, scale, fmt, place, place_title in [
+    for col, title, subtitle, scale, fmt, tip in [
         ("surface_temp", "Surface temperature", "°C, average of 10:40 am and night",
-         alt.Scale(range=HEAT, domain=[31, 34], clamp=True), ".1f", "H", "wards as hot or cooler"),
-        ("people_per_ha", "People", "per hectare",
-         alt.Scale(range=PEOPLE[1:], type="log", domain=[10, 1500], clamp=True), ",.0f", "E", "wards as crowded or less"),
-        ("trees", "Tree cover", "% of the ward under trees",
-         alt.Scale(range=TREES[1:], domain=[0, 0.4], clamp=True), ".0%", "V", "wards with as many trees or more"),
+         alt.Scale(range=HEAT, domain=[31, 34], clamp=True), ".2f", "surface °C"),
+        ("people_per_ha", "People", "per hectare", alt.Scale(range=PEOPLE[1:], type="log", domain=[10, 1500], clamp=True), ",.0f",
+         "people per hectare"),
+        ("trees", "Tree cover", "% of the ward under trees", alt.Scale(range=TREES[1:], domain=[0, 0.4], clamp=True), ".1%",
+         "tree cover"),
     ]:
         maps.append(
             alt.Chart(g, title=alt.Title(title, subtitle=subtitle))
             .mark_geoshape(stroke=PAPER, strokeWidth=0.3)
             .encode(color=alt.Color(f"{col}:Q", scale=scale,
-                                    legend=alt.Legend(title=None, format=fmt, orient="bottom", gradientLength=190,
-                                                      gradientThickness=8)),
-                    tooltip=[alt.Tooltip("label:N", title="ward"), alt.Tooltip(f"{col}:Q", format=fmt, title=title.lower()),
-                             alt.Tooltip(f"{place}:Q", format=".0%", title=place_title)])
+                                    legend=alt.Legend(title=None, format=fmt.replace(".1%", ".0%").replace(".2f", ".1f"), orient="bottom",
+                                                      gradientLength=190, gradientThickness=8)),
+                    tooltip=[alt.Tooltip("label:N", title="ward"), alt.Tooltip(f"{col}:Q", format=fmt, title=tip)])
             .project("mercator")
             .properties(width=width, height=height)
         )
@@ -352,9 +350,9 @@ def risk_explorer(g: gpd.GeoDataFrame):
         .transform_calculate(risk="datum.rank >= 0.7 ? 'High' : datum.rank >= 0.4 ? 'Medium' : 'Low'")
     )
     risk_color = alt.Color("risk:N", scale=alt.Scale(domain=list(RISK), range=list(RISK.values())), legend=alt.Legend(title=None))
-    extra = {"surface_temp": (".1f", "surface °C, morning and night"),
-             "people_per_ha": (",.0f", "people / hectare"), "trees": (".0%", "tree cover")}
-    tips = [alt.Tooltip("label:N", title="ward"), alt.Tooltip("risk:N"), alt.Tooltip("score:Q", format=".2f", title="risk score")]
+    extra = {"surface_temp": (".2f", "surface °C"),
+             "people_per_ha": (",.0f", "people / hectare"), "trees": (".1%", "tree cover")}
+    tips = [alt.Tooltip("label:N", title="ward"), alt.Tooltip("risk:N"), alt.Tooltip("score:Q", format=".3f", title="risk score")]
     tips += [alt.Tooltip(f"{c}:Q", format=f, title=t) for c, (f, t) in extra.items() if c in g.columns]
     city = (
         base.mark_geoshape()
