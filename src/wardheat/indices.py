@@ -28,10 +28,28 @@ def classify(score: pd.Series, cuts=(40, 70)) -> pd.Series:
     return pd.Series(np.select([score >= hi, score >= lo], ["High", "Medium"], "Low"), index=score.index)
 
 
+def ward_table(wards=None) -> pd.DataFrame:
+    """One row per ward, averaged from the 30 m satellite maps exactly as lesson 3 does it."""
+    from . import datapack
+    from .grid import ward_labels, zonal_stats
+    from .wards import load_wards
+
+    wards = wards if wards is not None else load_wards()
+    labels = ward_labels(wards, datapack.grid30())
+    built_up = datapack.layer("built_frac") >= 0.5
+    f = zonal_stats({"day_heat": np.where(built_up, datapack.layer("lst_day"), np.nan),
+                     "night_heat": datapack.layer("lst_night"),
+                     "trees": datapack.layer("canopy_frac"),
+                     "people_per_ha": datapack.layer("pop") / 0.09}, labels)
+    f = f.rename(columns=lambda c: c.removesuffix("_mean"))
+    f.insert(0, "ward", wards.set_index("ward_uid")["label"])
+    return f
+
+
 def ward_risk(f: pd.DataFrame) -> pd.DataFrame:
-    """H, E, V (ranks 0-1), the risk score (their product) and class for every ward of the feature table."""
-    H = (f["lst_built"].rank(pct=True) + f["lst_night"].rank(pct=True)) / 2  # hotter by day and at night
-    E = f["pop_density"].rank(pct=True)  # more crowded
-    V = (-f["canopy_frac"]).rank(pct=True)  # less tree shade
+    """Heat, crowding and lack of shade as ranks among wards (0-1), their product and the class."""
+    H = (f["day_heat"].rank(pct=True) + f["night_heat"].rank(pct=True)) / 2  # hotter by day and at night
+    E = f["people_per_ha"].rank(pct=True)  # more crowded
+    V = (-f["trees"]).rank(pct=True)  # less tree shade
     score = H * E * V
     return pd.DataFrame({"H": H, "E": E, "V": V, "score": score, "risk": classify(score)}, index=f.index)

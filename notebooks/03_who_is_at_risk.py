@@ -14,10 +14,10 @@ def _():
     import numpy as np
 
     from wardheat import build, charts, datapack
+    from wardheat.grid import ward_labels, zonal_stats
     from wardheat.wards import load_wards
 
-    wards = load_wards()
-    return build, charts, datapack, mo, np, wards
+    return build, charts, datapack, load_wards, mo, np, ward_labels, zonal_stats
 
 
 @app.cell(hide_code=True)
@@ -28,41 +28,31 @@ def _(mo):
     # Who is at risk?
 
     <div class="lead">Heat is a risk where it meets people who can't escape it:
-    risk = **heat × people × lack of shade**.</div>
+    risk = <b>heat × crowding × lack of shade</b>.</div>
 
-    ## Where people live
+    ## Three maps from space
 
-    Census 2011 ward counts, spread inside each ward with WorldPop's 2025 map. Download one row per ward:
+    Each ingredient is a map made from satellite pictures, on the same 30 m squares. Download them:
     """)
     return
 
 
 @app.cell
 def _(datapack):
-    f = datapack.table("ward_features")  # one row per ward: heat, people, trees
-    f["people_per_ha"] = (f.pop_density / 100).round()  # people per hectare, the same unit as the map below
-    f[["label", "lst_built", "lst_night", "people_per_ha", "canopy_frac"]].head()
-    return (f,)
+    day_heat = datapack.layer("lst_day")  # °C, Landsat by day (lesson 1)
+    night_heat = datapack.layer("lst_night")  # °C, MODIS at night (lesson 1)
+    trees = datapack.layer("canopy_frac")  # 0-1 tree cover, from sharp satellite photos
+    people = datapack.layer("pop")  # people per square (Census 2011 + WorldPop)
+    return day_heat, night_heat, people, trees
 
 
 @app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    The same people per hectare (a 100 m × 100 m patch), now square by square: darker is more crowded.
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(charts, datapack):
-    charts.cell_map(
-        datapack.table("pixels"),
-        {"people per hectare": "people_per_ha"},
-        "people per hectare",
-        palette=charts.PEOPLE,
-        domains={"people per hectare": [0, 400]},
-        fmt=",.0f",
-    )
+def _(charts, day_heat, people, trees):
+    charts.images({
+        "Heat by day · Landsat": day_heat,
+        "Trees · Meta's map from satellite photos": (trees * 100, "% tree cover", charts.TREES),
+        "People · WorldPop, from mapped buildings": (people / 0.09, "people per hectare", charts.PEOPLE),
+    })
     return
 
 
@@ -75,19 +65,45 @@ def _(build):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    ## One row per ward
+
+    Average each map inside every ward, as in lesson 1 (a 30 m square is 0.09 hectare):
+    """)
+    return
+
+
+@app.cell
+def _(datapack, day_heat, load_wards, night_heat, np, people, trees, ward_labels, zonal_stats):
+    wards = load_wards()
+    labels = ward_labels(wards, datapack.grid30())  # each square -> its ward
+    built_up = datapack.layer("built_frac") >= 0.5  # lesson 1's rule
+
+    f = zonal_stats({
+        "day_heat": np.where(built_up, day_heat, np.nan),
+        "night_heat": night_heat,
+        "trees": trees,
+        "people_per_ha": people / 0.09,
+    }, labels).rename(columns=lambda c: c.removesuffix("_mean"))
+    f.insert(0, "ward", wards.set_index("ward_uid")["label"])
+    f.round(2).head()
+    return f, wards
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
     ## Three ingredients, one score
 
-    Each ingredient becomes a rank among wards: heat 0.88 means hotter than 88 % of wards.
+    Turn each column into a rank among wards: heat 0.88 means hotter than 88 % of wards.
     """)
     return
 
 
 @app.cell
 def _(f):
-    # rank(pct=True): 0.88 = higher than 88 % of wards
-    heat = (f.lst_built.rank(pct=True) + f.lst_night.rank(pct=True)) / 2  # day and night
+    heat = (f.day_heat.rank(pct=True) + f.night_heat.rank(pct=True)) / 2  # day and night
     crowding = f.people_per_ha.rank(pct=True)
-    no_shade = (-f.canopy_frac).rank(pct=True)  # less tree cover = higher
+    no_shade = (-f.trees).rank(pct=True)  # less tree cover = higher
 
     risk = heat * crowding * no_shade  # high only if all three are high
     return crowding, heat, no_shade, risk
@@ -97,8 +113,8 @@ def _(f):
 def _(charts, crowding, f, heat, no_shade, risk, wards):
     from wardheat.indices import classify
 
-    table = f.assign(H=heat, E=crowding, V=no_shade, score=risk, risk=classify(risk))
-    g = charts.ward_shapes(wards, table, keep=["H", "E", "V", "risk", "lst_built", "lst_night", "people_per_ha", "canopy_frac"])
+    table = f.assign(H=heat, E=crowding, V=no_shade, score=risk, risk=classify(risk)).reset_index()
+    g = charts.ward_shapes(wards, table, keep=["H", "E", "V", "risk", "day_heat", "night_heat", "people_per_ha", "trees"])
     charts.ingredient_maps(g)
     return (g,)
 
@@ -107,16 +123,10 @@ def _(charts, crowding, f, heat, no_shade, risk, wards):
 def _(crowding, f, heat, mo, no_shade, risk):
     _w = risk.idxmax()
     mo.md(f"""
-    **{f.label[_w]}** is hotter than {heat[_w]:.0%} of wards, more crowded than {crowding[_w]:.0%} and
+    **{f.ward[_w]}** is hotter than {heat[_w]:.0%} of wards, more crowded than {crowding[_w]:.0%} and
     less shaded than {no_shade[_w]:.0%}: {heat[_w]:.2f} × {crowding[_w]:.2f} × {no_shade[_w]:.2f} =
     **{risk[_w]:.2f}**, the city's highest risk.
-    """)
-    return
 
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
     ## Your weights
 
     How much should each count? Drag the sliders; the top 30 % of wards are High risk.
@@ -143,7 +153,7 @@ def _(mo):
 @app.cell
 def _(crowding, f, heat, no_shade, risk):
     plain = (heat + crowding + no_shade) / 3  # a plain average instead of multiplying
-    compare = f[["label"]].assign(multiplied=risk.rank(ascending=False), plain=plain.rank(ascending=False))
+    compare = f[["ward"]].assign(multiplied=risk.rank(ascending=False), plain=plain.rank(ascending=False))
     compare.assign(moved=compare.multiplied - compare.plain).nlargest(10, "moved")
     return
 
@@ -152,13 +162,7 @@ def _(crowding, f, heat, no_shade, risk):
 def _(mo):
     mo.md(r"""
     `moved` = places a ward climbs. A risk map shows where to look first; check it on the ground.
-    """)
-    return
 
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
     <div class="next">Next → <b>4 · When should we warn?</b></div>
     """)
     return

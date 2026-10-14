@@ -78,8 +78,8 @@ def _(charts, era5, normal):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Yellow = hotter than 9 in 10 days for that date, orange 19 in 20, red 49 in 50, magenta 199 in 200
-    (the night's low counts too, and hot days and nights in a row add a level). Every day since 1991:
+    The night's low is judged the same way, and hot days and nights in a row add a level. Every day
+    since 1991:
     """)
     return
 
@@ -130,7 +130,7 @@ def _(mo):
 
 @app.cell
 def _(datapack, indices, levels, pd, warning, week):
-    wards_risk = indices.ward_risk(datapack.table("ward_features"))["risk"]  # High / Medium / Low, lesson 3
+    wards_risk = indices.ward_risk(indices.ward_table())["risk"]  # High / Medium / Low, as in lesson 3
 
     tomorrow = week.iloc[1]  # row 0 is today
     hot_day = levels[levels.level >= 2].iloc[-1]  # the last day that was "hot" or worse
@@ -144,7 +144,7 @@ def _(datapack, indices, levels, pd, warning, week):
 
 @app.cell(hide_code=True)
 def _(alerts, charts, datapack, hot_day, load_wards, tomorrow):
-    _g = charts.ward_shapes(load_wards(), datapack.table("ward_features")[["ward_uid"]].join(alerts), keep=["tomorrow", "hot_day"])
+    _g = charts.ward_shapes(load_wards(), alerts.reset_index(), keep=["tomorrow", "hot_day"])
     charts.alert_maps(_g, [
         ("tomorrow", f"Tomorrow, {tomorrow.name:%d %b}", f"forecast {tomorrow.tmax:.0f} °C: {tomorrow['in words']}"),
         ("hot_day", f"{hot_day.name:%d %b %Y}", f"{hot_day.tmax:.1f} °C: {hot_day['in words']}"),

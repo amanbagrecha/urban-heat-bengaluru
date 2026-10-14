@@ -22,6 +22,7 @@ INK, MUTED, RULE, PAPER = "#1d1b16", "#6b665c", "#e3ded2", "#faf8f3"
 FONT = "IBM Plex Sans, system-ui, sans-serif"
 
 HEAT = ["#fbf3dc", "#f5d58a", "#eda65a", "#d9693b", "#ad372c", "#5f1d2b"]
+TREES = ["#f4f0e6", "#c9d9a8", "#8fb36b", "#4f8a3f", "#24572a"]
 PEOPLE = ["#f4f0e6", "#dccbe0", "#b08fbf", "#7c5795", "#4a2b63"]
 COVER = {"trees": "#4f7d4a", "water": "#3d7ea6", "mixed": "#b9b2a5", "built-up": "#8c5a4a", "farmland": "#d1a24f"}
 RISK = {"Low": "#ece4cf", "Medium": "#e9a35a", "High": "#b23a2e"}
@@ -111,19 +112,23 @@ def image(arr, unit: str = "°C", vmin: float | None = None, vmax: float | None 
 
 
 
-def images(pictures: dict[str, np.ndarray], unit: str = "°C"):
-    """Rasters side by side as plain pictures, each with its own colour bar; keys are the titles."""
+def images(pictures: dict, unit: str = "°C"):
+    """Rasters side by side as plain pictures, each with its own colour bar; keys are the titles.
+
+    A value is an array, or ``(array, unit, colours)``.
+    """
     import matplotlib.pyplot as plt
     from matplotlib.colors import LinearSegmentedColormap
 
     fig, axes = plt.subplots(1, len(pictures), figsize=(4.2 * len(pictures), 4.6))
-    for ax, (title, arr) in zip(np.atleast_1d(axes), pictures.items()):
+    for ax, (title, pic) in zip(np.atleast_1d(axes), pictures.items()):
+        arr, u, colours = pic if isinstance(pic, tuple) else (pic, unit, HEAT)
         lo, hi = np.nanpercentile(arr, [2, 98])
-        im = ax.imshow(arr, cmap=LinearSegmentedColormap.from_list("heat", HEAT), vmin=lo, vmax=hi, interpolation="nearest")
+        im = ax.imshow(arr, cmap=LinearSegmentedColormap.from_list("c", colours), vmin=lo, vmax=hi, interpolation="nearest")
         ax.set_title(title, fontsize=10, color=INK, loc="left")
         ax.set_axis_off()
         cb = fig.colorbar(im, ax=ax, orientation="horizontal", fraction=0.04, pad=0.03, aspect=30)
-        cb.set_label(unit, color=MUTED, fontsize=9)
+        cb.set_label(u, color=MUTED, fontsize=9)
         cb.outline.set_visible(False)
         cb.ax.tick_params(labelsize=8, colors=MUTED, length=0)
     fig.patch.set_alpha(0)
@@ -287,10 +292,10 @@ def ingredient_maps(g: gpd.GeoDataFrame, width: int = 215, height: int = 240):
                                         gradientLength=300, gradientThickness=8))
     maps = []
     for col, title, beats, real in [
-        ("H", "Heat", "hotter than", [alt.Tooltip("lst_built:Q", format=".1f", title="day °C"),
-                                      alt.Tooltip("lst_night:Q", format=".1f", title="night °C")]),
+        ("H", "Heat", "hotter than", [alt.Tooltip("day_heat:Q", format=".1f", title="day °C"),
+                                      alt.Tooltip("night_heat:Q", format=".1f", title="night °C")]),
         ("E", "Crowding", "more crowded than", [alt.Tooltip("people_per_ha:Q", format=",.0f", title="people / hectare")]),
-        ("V", "Lack of shade", "less shaded than", [alt.Tooltip("canopy_frac:Q", format=".0%", title="tree cover")]),
+        ("V", "Lack of shade", "less shaded than", [alt.Tooltip("trees:Q", format=".0%", title="tree cover")]),
     ]:
         maps.append(
             alt.Chart(g, title=alt.Title(title, subtitle=f"{beats} … of wards"))
@@ -322,8 +327,8 @@ def risk_explorer(g: gpd.GeoDataFrame):
         .transform_calculate(risk="datum.rank >= 0.7 ? 'High' : datum.rank >= 0.4 ? 'Medium' : 'Low'")
     )
     risk_color = alt.Color("risk:N", scale=alt.Scale(domain=list(RISK), range=list(RISK.values())), legend=alt.Legend(title=None))
-    extra = {"lst_built": (".1f", "day °C (built-up)"), "lst_night": (".1f", "night °C"),
-             "pop_density": (",.0f", "people / km²"), "people_per_ha": (",.0f", "people / hectare"), "canopy_frac": (".0%", "tree canopy")}
+    extra = {"day_heat": (".1f", "day °C"), "night_heat": (".1f", "night °C"),
+             "people_per_ha": (",.0f", "people / hectare"), "trees": (".0%", "tree cover")}
     tips = [alt.Tooltip("label:N", title="ward"), alt.Tooltip("risk:N")]
     tips += [alt.Tooltip(f"{c}:Q", format=f, title=t) for c, (f, t) in extra.items() if c in g.columns]
     city = (
@@ -483,27 +488,33 @@ def built_rule(wc: np.ndarray, start: float = 5 / 9):
 
 
 def levels_explainer(era5: pd.DataFrame, normal: pd.DataFrame, day: str = "2024-04-28"):
-    """Daily highs of the weeks around one date in 1991-2020, with the four warning levels as coloured zones."""
+    """The warning levels for one date as a coloured scale in °C, with how many days in 100 fall in each."""
     d = pd.Timestamp(day)
     doy = d.dayofyear
-    base = era5.loc["1991":"2020"]
-    near = base[((base.index.dayofyear - doy + 183) % 366 - 183).__abs__() <= 15]
     cuts = [max(normal.loc[doy, f"tmax_p{p}"], normal[f"tmax_ann_p{p}"].iloc[0]) for p in ("90", "95", "98", "99_5")]
-    zones = pd.DataFrame({"from": cuts, "to": cuts[1:] + [max(near.tmax.max(), era5.loc[day, "tmax"]) + 1],
-                          "level": ["Yellow", "Orange", "Red", "Magenta"], "words": ["warm", "hot", "very hot", "extreme"]})
-    near = near[near.tmax >= np.percentile(near.tmax, 1)]  # drop a few rainy outliers that stretch the axis
-    lo = float(np.floor(near.tmax.min()))
-    band = alt.Chart(zones).mark_rect(opacity=0.35).encode(
-        x=alt.X("from:Q", title="daily high, °C", scale=alt.Scale(domain=[lo, zones.to.max()]),
-                axis=alt.Axis(values=list(range(int(lo), int(zones.to.max()) + 1)), format=".0f")), x2="to:Q",
-        color=alt.Color("words:N", scale=alt.Scale(domain=["warm", "hot", "very hot", "extreme"], range=LEVEL_COLORS[1:]),
-                        legend=alt.Legend(title=None, orient="top", direction="horizontal", symbolOpacity=0.6)),
-        tooltip=["words:N", alt.Tooltip("from:Q", format=".1f", title="from °C")])
-    bars = alt.Chart(near.reset_index()).mark_bar(color="#8a8478", binSpacing=1).encode(
-        x=alt.X("tmax:Q", bin=alt.Bin(step=0.5), axis=None), y=alt.Y("count():Q", title="days, 1991–2020"))
-    mark = alt.Chart(pd.DataFrame({"t": [era5.loc[day, "tmax"]], "label": [f"{d:%d %b %Y}: {era5.loc[day, 'tmax']:.1f} °C"]}))
-    rule = mark.mark_rule(color=INK, strokeWidth=2).encode(x="t:Q")
-    text = mark.mark_text(align="right", dx=-4, dy=14, fontSize=11, color=INK, fontWeight="bold").encode(x="t:Q", y=alt.value(0), text="label:N")
-    return alt.layer(band, bars, rule, text).properties(
-        width=560, height=210, title=alt.Title(f"Every day within two weeks of {d:%d %B}, 1991–2020",
-                                               subtitle="Grey bars: how many days reached each high. Coloured zones: the warning levels"))
+    usual = float(normal.loc[doy, "tmax_p50"])
+    that = float(era5.loc[day, "tmax"])
+    lo, hi = np.floor(usual - 2), np.ceil(max(that, cuts[-1]) + 1)
+    zones = pd.DataFrame({
+        "from": [lo, *cuts], "to": [*cuts, hi],
+        "words": ["normal", "warm", "hot", "very hot", "extreme"],
+        "share": ["90", "5", "3", "1.5", "0.5"],
+        "ink": [INK, INK, INK, PAPER, PAPER],
+    })
+    x = alt.X("from:Q", scale=alt.Scale(domain=[lo, hi], nice=False), title=f"daily high around {d:%d %B}, °C",
+              axis=alt.Axis(values=[round(c, 1) for c in cuts], format=".1f", grid=False))
+    base = alt.Chart(zones)
+    bar = base.mark_rect(stroke=PAPER, strokeWidth=2).encode(
+        x=x, x2="to:Q", y=alt.value(40), y2=alt.value(100),
+        color=alt.Color("words:N", scale=alt.Scale(domain=list(zones.words), range=LEVEL_COLORS), legend=None))
+    mid = base.transform_calculate(m="(datum.from + datum.to) / 2")
+    words = mid.mark_text(fontSize=11, fontWeight="bold").encode(x="m:Q", y=alt.value(62), text="words:N",
+                                                                 color=alt.Color("ink:N", scale=None))
+    share = mid.mark_text(fontSize=11).encode(x="m:Q", y=alt.value(82), text="share:N", color=alt.Color("ink:N", scale=None))
+    marks = pd.DataFrame({"t": [usual, that], "label": [f"a usual day: {usual:.1f} °C", f"{d:%d %b %Y}: {that:.1f} °C"]})
+    pin = alt.Chart(marks).mark_rule(color=INK, strokeWidth=2).encode(x="t:Q", y=alt.value(28), y2=alt.value(100))
+    pin_text = alt.Chart(marks).mark_text(fontSize=11, color=INK, dy=-2, baseline="bottom").encode(
+        x="t:Q", y=alt.value(28), text="label:N")
+    return alt.layer(bar, words, share, pin, pin_text).properties(
+        width=600, height=110, title=alt.Title(f"How hot is too hot around {d:%d %B}?",
+                                               subtitle="The numbers: how many of every 100 days around this date (1991–2020) reached each zone"))

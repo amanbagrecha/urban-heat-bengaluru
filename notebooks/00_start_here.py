@@ -56,11 +56,11 @@ def _(charts, climate, datapack, indices, load_wards, pd, warning):
     tomorrow = warning.heatrisk(climate.forecast(days=3, past_days=2), _normal).loc[climate.today() + pd.Timedelta(days=1)]
     _levels = warning.heatrisk(_era5.loc["1991":], _normal)
     hot_day = _levels[_levels.level >= 2].iloc[-1]  # the last hot day in the record
-    _f = datapack.table("ward_features")
-    _risk = indices.ward_risk(_f)["risk"]
-    _f = _f.assign(tomorrow=warning.ward_alerts(int(tomorrow.level), _risk),
-                   hot_day=warning.ward_alerts(int(hot_day.level), _risk))
-    alert_wards = charts.ward_shapes(load_wards(), _f, keep=["tomorrow", "hot_day"])
+    _wards = load_wards()
+    _risk = indices.ward_risk(indices.ward_table(_wards))["risk"]  # as in lesson 3
+    _f = _risk.to_frame().assign(tomorrow=warning.ward_alerts(int(tomorrow.level), _risk),
+                                 hot_day=warning.ward_alerts(int(hot_day.level), _risk)).reset_index()
+    alert_wards = charts.ward_shapes(_wards, _f, keep=["tomorrow", "hot_day"])
     return alert_wards, hot_day, tomorrow
 
 
